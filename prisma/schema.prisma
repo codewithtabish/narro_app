@@ -1,0 +1,618 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+enum PlanTier {
+  FREE
+  PRO
+}
+
+enum PaymentProvider {
+  NONE
+  SAFEPAY
+  REVENUECAT
+}
+
+enum UserStatus {
+  ONLINE
+  OFFLINE
+}
+
+enum AISessionStatus {
+  ACTIVE
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  EXPIRED
+  CANCELLED
+  INCOMPLETE
+  TRIALING
+  PAST_DUE
+}
+
+enum SafepayStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+  EXPIRED
+}
+
+enum SafepayPaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  CANCELLED
+  REFUNDED
+}
+
+enum BillingInterval {
+  MONTHLY
+  YEARLY
+}
+
+enum RoomVisibility {
+  PUBLIC
+  PRIVATE
+}
+
+enum RoomStatus {
+  OPEN
+  CLOSED
+}
+
+enum NotificationType {
+  NEW_MESSAGE
+  ROOM_INVITATION
+  PROGRESS_REPORT
+  SUBSCRIPTION_UPDATE
+  MISSED_CALL
+  SYSTEM
+}
+
+enum PushPlatform {
+  ANDROID
+  IOS
+  WEB
+}
+
+enum PushProvider {
+  FCM
+  EXPO
+  APNS
+}
+
+enum CallStatus {
+  RINGING
+  ACCEPTED
+  REJECTED
+  MISSED
+  ENDED
+  CANCELLED
+}
+
+enum ProficiencyLevel {
+  BEGINNER
+  ELEMENTARY
+  INTERMEDIATE
+  UPPER_INTERMEDIATE
+  ADVANCED
+  NATIVE
+}
+
+enum OnboardingStep {
+  PROFILE
+  LANGUAGES
+  LEVEL
+  INTERESTS
+  COMPLETED
+}
+
+// ============================================
+// USER
+// ============================================
+
+model User {
+  id              String  @id @default(cuid())
+  clerkUserId     String  @unique
+  email           String? @unique
+  name            String
+  imageUrl        String? // Clerk-provided default avatar
+  profileImageUrl String? // User-uploaded avatar (overrides Clerk default)
+  bio             String?
+
+  // Legacy fields (kept for backwards compatibility)
+  preferredLanguage String @default("en")
+  learningLanguage  String @default("en")
+
+  // ────────────────────────────────────────────────────────────
+  // LANGUAGES — user can speak AND learn multiple
+  // ────────────────────────────────────────────────────────────
+  /**
+   * /**
+   * Languages the user speaks. ISO 639-1 codes.
+   * Example: ["ur", "en"]
+   */
+  languagesSpoken String[] @default([])
+
+  /**
+   * Languages the user is learning. ISO 639-1 codes.
+   * Example: ["es", "fr"]
+   */
+  languagesLearning String[] @default([])
+
+  /**
+   * Per-language proficiency map.
+   * Keys = ISO codes from languagesLearning.
+   * Values = ProficiencyLevel strings.
+   * Example: { "es": "BEGINNER", "fr": "INTERMEDIATE" }
+   */
+  proficiencyByLanguage Json?
+
+  // ────────────────────────────────────────────────────────────
+  // PROFILE EXTENSIONS
+  // ────────────────────────────────────────────────────────────
+  interests String[] @default([])
+
+  // ────────────────────────────────────────────────────────────
+  // ONBOARDING GATE
+  // ────────────────────────────────────────────────────────────
+  onboardingCompletedAt DateTime?
+
+  // Redis is the real-time presence source.
+  status     UserStatus @default(ONLINE)
+  isAvailable Boolean @default(true)
+  lastSeenAt DateTime?
+
+
+  // AI speaking allowance.
+  freeSecondsGranted Int @default(600)
+  freeSecondsUsed    Int @default(0)
+
+  // Current subscription snapshot.
+  planTier        PlanTier        @default(FREE)
+  paymentProvider PaymentProvider @default(NONE)
+  planStartedAt   DateTime?
+  planExpiresAt   DateTime?
+  nextRenewalAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  onboarding                 Onboarding?
+  hostedRooms                Room[]
+  aiSessions                 AISession[]
+  subscriptions              Subscription[]
+  safepaySubscriptions       SafepaySubscription[]
+  safepayPayments            SafepayPayment[]
+  usageRecords               UsageRecord[]
+  progressReports            ProgressReport[]
+  callsAsCaller              Call[]                @relation("CallCaller")
+  callsAsReceiver            Call[]                @relation("CallReceiver")
+  chatConversationsAsUserOne ChatConversation[]    @relation("ChatUserOne")
+  chatConversationsAsUserTwo ChatConversation[]    @relation("ChatUserTwo")
+  notifications              Notification[]
+  pushDevices                PushDevice[]
+  blocksCreated              UserBlock[]           @relation("BlocksCreated")
+  blocksReceived             UserBlock[]           @relation("BlocksReceived")
+
+  @@index([status])
+  @@index([lastSeenAt])
+  @@index([planTier])
+  @@index([paymentProvider])
+  @@index([createdAt])
+  @@index([languagesSpoken])
+  @@index([languagesLearning])
+  @@index([onboardingCompletedAt])
+}
+
+// ============================================
+// ONBOARDING — journey + analytics tracking
+// ============================================
+
+model Onboarding {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Progress state
+  currentStep    OnboardingStep   @default(PROFILE)
+  completedSteps OnboardingStep[] @default([])
+
+  // Step completion timestamps
+  profileCompletedAt   DateTime?
+  languagesCompletedAt DateTime?
+  levelCompletedAt     DateTime?
+  interestsCompletedAt DateTime?
+
+  // Journey metadata
+  startedAt       DateTime  @default(now())
+  completedAt     DateTime?
+  abandonedAt     DateTime?
+  durationSeconds Int?
+
+  // Funnel analytics
+  source  String?
+  variant String?
+  device  String?
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([currentStep])
+  @@index([completedAt])
+  @@index([abandonedAt])
+  @@index([startedAt])
+}
+
+// ============================================
+// REVENUECAT SUBSCRIPTIONS
+// ============================================
+
+model Subscription {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  tier   PlanTier
+  status SubscriptionStatus @default(INCOMPLETE)
+
+  revenueCatAppUserId   String?
+  productId             String?
+  entitlementId         String?
+  store                 String?
+  originalTransactionId String? @unique
+
+  currentPeriodStart DateTime?
+  currentPeriodEnd   DateTime?
+  cancelAtPeriodEnd  Boolean   @default(false)
+  canceledAt         DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, status])
+  @@index([userId, tier])
+  @@index([currentPeriodEnd])
+  @@index([revenueCatAppUserId])
+}
+
+// ============================================
+// SAFEPAY SUBSCRIPTIONS
+// ============================================
+
+model SafepaySubscription {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  safepayCustomerId     String?
+  safepaySubscriptionId String? @unique
+  safepayTrackerId      String? @unique
+  safepayPlanId         String?
+
+  planTier        PlanTier        @default(PRO)
+  billingInterval BillingInterval @default(MONTHLY)
+  status          SafepayStatus   @default(ACTIVE)
+
+  amount   Int?
+  currency String @default("PKR")
+
+  startedAt         DateTime  @default(now())
+  currentStart      DateTime?
+  currentEnd        DateTime?
+  nextRenewalAt     DateTime?
+  cancelledAt       DateTime?
+  cancelAtPeriodEnd Boolean   @default(false)
+
+  rawPayload Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  payments SafepayPayment[]
+
+  @@index([userId])
+  @@index([userId, status])
+  @@index([safepaySubscriptionId])
+  @@index([status])
+  @@index([currentEnd])
+}
+
+// ============================================
+// SAFEPAY PAYMENTS
+// ============================================
+
+model SafepayPayment {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  referenceId      String  @unique
+  safepayTrackerId String? @unique
+  transactionId    String? @unique
+
+  planTier        PlanTier        @default(PRO)
+  billingInterval BillingInterval @default(MONTHLY)
+
+  amount   Int
+  currency String               @default("PKR")
+  status   SafepayPaymentStatus @default(PENDING)
+
+  paidAt     DateTime?
+  failedAt   DateTime?
+  refundedAt DateTime?
+
+  safepaySubscriptionId String?
+  safepaySubscription   SafepaySubscription? @relation(fields: [safepaySubscriptionId], references: [safepaySubscriptionId], onDelete: SetNull)
+
+  rawPayload Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, status])
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+}
+
+// ============================================
+// ROOMS
+// ============================================
+
+model Room {
+  id              String @id @default(cuid())
+  liveKitRoomName String @unique
+  hostId          String
+
+  title       String
+  description String?
+  language    String  @default("en")
+
+  visibility      RoomVisibility @default(PUBLIC)
+  status          RoomStatus     @default(OPEN)
+  maxParticipants Int            @default(10)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  closedAt  DateTime?
+
+  host          User           @relation(fields: [hostId], references: [id], onDelete: Cascade)
+  notifications Notification[]
+
+  @@index([hostId])
+  @@index([status, visibility])
+  @@index([language, status])
+  @@index([createdAt])
+}
+
+// ============================================
+// AI SESSIONS
+// ============================================
+
+model AISession {
+  id           String @id @default(cuid())
+  userId       String
+  modelKey     String
+  languageCode String
+  languageName String
+
+  status AISessionStatus @default(ACTIVE)
+
+  startedAt            DateTime  @default(now())
+  endedAt              DateTime?
+  totalDurationSeconds Int       @default(0)
+  freeSecondsUsed      Int       @default(0)
+  proSecondsUsed       Int       @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  usageRecords    UsageRecord[]
+  progressReports ProgressReport[]
+
+  @@index([userId, createdAt])
+  @@index([userId, status])
+  @@index([status, startedAt])
+}
+
+// ============================================
+// AI USAGE RECORDS
+// ============================================
+
+model UsageRecord {
+  id          String  @id @default(cuid())
+  userId      String
+  aiSessionId String?
+
+  secondsUsed     Int
+  freeSecondsUsed Int    @default(0)
+  proSecondsUsed  Int    @default(0)
+  modelKey        String
+
+  idempotencyKey String? @unique
+
+  createdAt DateTime @default(now())
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  aiSession AISession? @relation(fields: [aiSessionId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([aiSessionId])
+}
+
+// ============================================
+// PROGRESS REPORTS
+// ============================================
+
+model ProgressReport {
+  id           String  @id @default(cuid())
+  userId       String
+  aiSessionId  String?
+  languageCode String
+  languageName String
+
+  overallScore       Int?
+  fluencyScore       Int?
+  vocabularyScore    Int?
+  grammarScore       Int?
+  pronunciationScore Int?
+  estimatedLevel     String?
+
+  strengths          String[] @default([])
+  areasToImprove     String[] @default([])
+  recommendations    String[] @default([])
+  exampleCorrections Json?
+
+  createdAt DateTime @default(now())
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  aiSession AISession? @relation(fields: [aiSessionId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([aiSessionId])
+  @@index([userId, languageCode])
+}
+
+// ============================================
+// CHAT CONVERSATIONS
+// ============================================
+
+model ChatConversation {
+  id String @id @default(cuid())
+
+  userOneId String
+  userTwoId String
+
+  firebaseChatId String @unique
+
+  lastMessageAt DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  userOne User @relation("ChatUserOne", fields: [userOneId], references: [id], onDelete: Cascade)
+  userTwo User @relation("ChatUserTwo", fields: [userTwoId], references: [id], onDelete: Cascade)
+
+  notifications Notification[]
+
+  @@unique([userOneId, userTwoId])
+  @@index([userOneId, lastMessageAt])
+  @@index([userTwoId, lastMessageAt])
+}
+
+// ============================================
+// NOTIFICATIONS
+// ============================================
+
+model Notification {
+  id                 String  @id @default(cuid())
+  userId             String
+  roomId             String?
+  chatConversationId String?
+
+  type  NotificationType
+  title String
+  body  String?
+  data  Json?
+
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  room             Room?             @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  chatConversation ChatConversation? @relation(fields: [chatConversationId], references: [id], onDelete: SetNull)
+
+  @@index([userId, readAt, createdAt])
+  @@index([roomId])
+  @@index([chatConversationId])
+}
+
+// ============================================
+// PUSH DEVICES
+// ============================================
+
+model PushDevice {
+  id        String @id @default(cuid())
+  userId    String
+  pushToken String @unique
+
+  platform PushPlatform
+  provider PushProvider
+  deviceId String?
+
+  enabled          Boolean  @default(true)
+  lastRegisteredAt DateTime @default(now())
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, enabled])
+  @@index([lastRegisteredAt])
+}
+
+// ============================================
+// USER BLOCKS
+// ============================================
+
+model UserBlock {
+  id            String @id @default(cuid())
+  blockedById   String
+  blockedUserId String
+
+  reason    String?
+  createdAt DateTime @default(now())
+
+  blockedBy   User @relation("BlocksCreated", fields: [blockedById], references: [id], onDelete: Cascade)
+  blockedUser User @relation("BlocksReceived", fields: [blockedUserId], references: [id], onDelete: Cascade)
+
+  @@unique([blockedById, blockedUserId])
+  @@index([blockedById])
+  @@index([blockedUserId])
+  @@index([createdAt])
+}
+
+// ============================================
+// ONE-TO-ONE HUMAN CALLS
+// ============================================
+
+model Call {
+  id String @id @default(cuid())
+
+  callerId   String
+  receiverId String
+
+  liveKitRoomName String     @unique
+  status          CallStatus @default(RINGING)
+
+  startedAt       DateTime?
+  endedAt         DateTime?
+  durationSeconds Int       @default(0)
+  endReason       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  caller   User @relation("CallCaller", fields: [callerId], references: [id], onDelete: Cascade)
+  receiver User @relation("CallReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@index([callerId, createdAt])
+  @@index([receiverId, createdAt])
+  @@index([status, createdAt])
+}

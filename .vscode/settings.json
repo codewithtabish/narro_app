@@ -1,0 +1,79 @@
+{
+  // Hide generated and dependency folders from Explorer.
+  "files.exclude": {
+    "**/.git": true,
+    "**/node_modules": true,
+    "**/.next": true,
+    "**/.expo": true,
+    "**/.turbo": true,
+    "**/.vercel": true,
+    "**/dist": true,
+    "**/build": true,
+    "**/out": true,
+    "**/coverage": true,
+    "**/storybook-static": true,
+    "**/playwright-report": true,
+    "**/test-results": true,
+    "**/.gradle": true,
+    "**/Pods": true,
+    "**/DerivedData": true
+  },
+
+  // Reduce file watcher work.
+  "files.watcherExclude": {
+    "**/.git/objects/**": true,
+    "**/.git/subtree-cache/**": true,
+    "**/node_modules/**": true,
+    "**/.next/**": true,
+    "**/.expo/**": true,
+    "**/.expo-shared/**": true,
+    "**/.turbo/**": true,
+    "**/.vercel/**": true,
+    "**/dist/**": true,
+    "**/build/**": true,
+    "**/out/**": true,
+    "**/coverage/**": true,
+    "**/storybook-static/**": true,
+    "**/playwright-report/**": true,
+    "**/test-results/**": true,
+    "**/android/.gradle/**": true,
+    "**/android/app/build/**": true,
+    "**/ios/Pods/**": true,
+    "**/ios/build/**": true,
+    "**/ios/DerivedData/**": true
+  },
+
+  // Skip generated and dependency files in searches.
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/.git": true,
+    "**/.next": true,
+    "**/.expo": true,
+    "**/.expo-shared": true,
+    "**/.turbo": true,
+    "**/.vercel": true,
+    "**/dist": true,
+    "**/build": true,
+    "**/out": true,
+    "**/coverage": true,
+    "**/storybook-static": true,
+    "**/playwright-report": true,
+    "**/test-results": true,
+    "**/android/.gradle": true,
+    "**/android/app/build": true,
+    "**/ios/Pods": true,
+    "**/ios/build": true,
+    "**/ios/DerivedData": true
+  },
+
+  // Reduce automatic formatting and save-time work.
+  "editor.formatOnSave": false,
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit",
+    "source.organizeImports": "explicit"
+  },
+
+  // Avoid unnecessary automatic file restoration.
+  "workbench.editor.restoreViewState": false,
+  "WillLuke.nextjs.hasPrompted": true
+}
