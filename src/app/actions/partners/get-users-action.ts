@@ -95,9 +95,9 @@ async function fetchUsers(
     prisma.user.findMany({
       where,
       orderBy: [
-        { isAvailable: "desc" }, // Available users first
-        { lastSeenAt: "desc" },  // Then most recently seen
-        { createdAt: "desc" },   // Then newest
+        { isAvailable: "desc" },
+        { lastSeenAt: "desc" },
+        { createdAt: "desc" },
       ],
       skip: (page - 1) * limit,
       take: limit,

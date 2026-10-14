@@ -1,20 +1,11 @@
-// src/lib/actions/partners/types.ts
-// ============================================================
-// PARTNER USERS — shared types + constants
-// (Kept out of the "use server" file — Next.js only allows
-//  async functions to be exported from server action files.)
-// ============================================================
+// src/types/types.ts
 
 /* -------------------------------------------------------------------------- */
-/*  Constants                                                                  */
+/*  Users — Types + Constants                                                  */
 /* -------------------------------------------------------------------------- */
 
 export const USERS_PAGE_SIZE = 20;
 export const USERS_MAX_PAGE_SIZE = 20;
-
-/* -------------------------------------------------------------------------- */
-/*  Types                                                                      */
-/* -------------------------------------------------------------------------- */
 
 export interface PartnerUser {
   id: string;
@@ -22,7 +13,6 @@ export interface PartnerUser {
   imageUrl: string | null;
   profileImageUrl: string | null;
   bio: string | null;
-  /** Whether the user is available for calls right now. */
   isAvailable: boolean;
   languagesSpoken: string[];
   languagesLearning: string[];
@@ -34,7 +24,6 @@ export interface PartnerUser {
 export interface GetUsersOptions {
   page?: number;
   limit?: number;
-  /** When true → only users with `isAvailable: true`. */
   available?: boolean;
 }
 
