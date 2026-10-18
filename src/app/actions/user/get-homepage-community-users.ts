@@ -1,14 +1,12 @@
+
 "use server";
 
 import { auth } from "@clerk/nextjs/server";
 import { cacheLife, cacheTag } from "next/cache";
+import { connection } from "next/server";
 
 import { CACHE_TAGS } from "@/lib/cache-keys";
 import prisma from "@/lib/clients/prisma-client";
-
-/* -------------------------------------------------------------------------- */
-/*  Types                                                                      */
-/* -------------------------------------------------------------------------- */
 
 export type HomepageUser = {
   id: string;
@@ -26,21 +24,20 @@ export type GetHomepageCommunityUsersResult =
   | { success: true; users: HomepageUser[] }
   | { success: false; error: string };
 
-/* -------------------------------------------------------------------------- */
-/*  Cached Read                                                                */
-/* -------------------------------------------------------------------------- */
-
-async function getCachedCommunityUsers(currentClerkId?: string): Promise<HomepageUser[]> {
+async function getCachedCommunityUsers(
+  currentClerkId?: string,
+): Promise<HomepageUser[]> {
   "use cache";
-  
+
   cacheTag(CACHE_TAGS.homepageCommunity);
   cacheLife("max");
 
   const users = await prisma.user.findMany({
     where: {
       onboardingCompletedAt: { not: null },
-      // Exclude the current user if they are logged in
-      ...(currentClerkId ? { clerkUserId: { not: currentClerkId } } : {}),
+      ...(currentClerkId
+        ? { clerkUserId: { not: currentClerkId } }
+        : {}),
     },
     orderBy: {
       createdAt: "desc",
@@ -61,25 +58,31 @@ async function getCachedCommunityUsers(currentClerkId?: string): Promise<Homepag
 
   return users.map((user) => ({
     ...user,
-    proficiencyByLanguage: (user.proficiencyByLanguage as Record<string, string>) ?? {},
+    proficiencyByLanguage:
+      (user.proficiencyByLanguage as Record<string, string> | null) ?? {},
   }));
 }
 
-/* -------------------------------------------------------------------------- */
-/*  Server Action                                                              */
-/* -------------------------------------------------------------------------- */
-
 export async function getHomepageCommunityUsers(): Promise<GetHomepageCommunityUsersResult> {
+  await connection();
+
   try {
-    // 1. Check if the user is logged in
     const { userId: currentClerkId } = await auth();
 
-    // 2. Fetch data, passing the current user's ID to exclude them
-    const users = await getCachedCommunityUsers(currentClerkId ?? undefined);
-    
-    return { success: true, users };
+    const users = await getCachedCommunityUsers(
+      currentClerkId ?? undefined,
+    );
+
+    return {
+      success: true,
+      users,
+    };
   } catch (error) {
     console.error("[getHomepageCommunityUsers] Error:", error);
-    return { success: false, error: "Failed to load community users." };
+
+    return {
+      success: false,
+      error: "Failed to load community users.",
+    };
   }
 }

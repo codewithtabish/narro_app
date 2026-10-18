@@ -1,17 +1,20 @@
-// next.config.ts
+
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // ✅ Cache Components (required for the "use cache" directive)
+  // Cache Components for the "use cache" directive.
   cacheComponents: true,
 
+  // Enable Partial Prefetching alongside Cache Components.
+  partialPrefetching: true,
+
   experimental: {
-    // Allow uploads up to 10 MB through Server Actions (default is 1 MB)
+    // Allow uploads up to 10 MB through Server Actions.
     serverActions: {
       bodySizeLimit: "10mb",
     },
 
-    // Only bundle the parts of these packages you actually import
+    // Optimize imports from these packages.
     optimizePackageImports: [
       "lucide-react",
       "@clerk/nextjs",

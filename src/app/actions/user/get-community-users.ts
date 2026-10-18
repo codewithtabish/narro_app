@@ -1,16 +1,13 @@
-// src/app/actions/user/get-community-users.ts
+
 "use server";
 
 import { auth } from "@clerk/nextjs/server";
 import { cacheLife, cacheTag } from "next/cache";
+import { connection } from "next/server";
 
 import { Prisma } from "@/generated/prisma/client";
 import { CACHE_TAGS } from "@/lib/cache-keys";
 import prisma from "@/lib/clients/prisma-client";
-
-/* -------------------------------------------------------------------------- */
-/*  Types                                                                      */
-/* -------------------------------------------------------------------------- */
 
 export type CommunityUser = {
   id: string;
@@ -28,56 +25,49 @@ export type CommunityUser = {
 };
 
 export type GetCommunityUsersResult =
-  | { success: true; users: CommunityUser[]; hasMore: boolean; totalCount: number }
+  | {
+      success: true;
+      users: CommunityUser[];
+      hasMore: boolean;
+      totalCount: number;
+    }
   | { success: false; error: string };
 
-// Filter Types
-export type CommunityFilter = 
-  | "all" 
-  | "online" 
-  | "available" 
-  | string; // Language code (e.g., "es", "fr")
+export type CommunityFilter = "all" | "online" | "available" | string;
 
 const USERS_PER_PAGE = 24;
-
-/* -------------------------------------------------------------------------- */
-/*  Cached Read                                                                */
-/* -------------------------------------------------------------------------- */
 
 async function getCachedCommunityUsers(
   page: number,
   filter: CommunityFilter,
-  currentClerkId?: string
+  currentClerkId?: string,
 ): Promise<{ users: CommunityUser[]; totalCount: number }> {
   "use cache";
-  
+
   cacheTag(CACHE_TAGS.communityDirectory);
   cacheLife("max");
 
   const skip = (page - 1) * USERS_PER_PAGE;
 
-  // Build the query filter with strict Prisma typing
   const whereClause: Prisma.UserWhereInput = {
     onboardingCompletedAt: { not: null },
-    // Exclude the current user if they are logged in
-    ...(currentClerkId ? { clerkUserId: { not: currentClerkId } } : {}),
+    ...(currentClerkId
+      ? { clerkUserId: { not: currentClerkId } }
+      : {}),
   };
 
   if (filter === "online") {
     whereClause.status = "ONLINE";
   } else if (filter === "available") {
-    // If we want only people ready to call right now
     whereClause.isAvailable = true;
-    whereClause.status = "ONLINE"; 
+    whereClause.status = "ONLINE";
   } else if (filter !== "all") {
-    // If filter is a language code (e.g., "en", "es")
     whereClause.OR = [
       { languagesSpoken: { has: filter } },
       { languagesLearning: { has: filter } },
     ];
   }
 
-  // Fetch users and count in parallel
   const [users, totalCount] = await Promise.all([
     prisma.user.findMany({
       where: whereClause,
@@ -103,37 +93,35 @@ async function getCachedCommunityUsers(
   ]);
 
   return {
-    users: users.map((u) => ({
-      ...u,
+    users: users.map((user) => ({
+      ...user,
       proficiencyByLanguage:
-        (u.proficiencyByLanguage as Record<string, string>) ?? {},
+        (user.proficiencyByLanguage as Record<string, string> | null) ??
+        {},
     })),
     totalCount,
   };
 }
 
-/* -------------------------------------------------------------------------- */
-/*  Server Action                                                              */
-/* -------------------------------------------------------------------------- */
-
 export async function getCommunityUsers(
   page: number = 1,
-  filter: CommunityFilter = "all"
+  filter: CommunityFilter = "all",
 ): Promise<GetCommunityUsersResult> {
+  await connection();
+
   try {
-    const safePage = Math.max(1, page);
-    
-    // 1. Check if the user is logged in
     const { userId: currentClerkId } = await auth();
 
-    // 2. Fetch data from cache, passing the current ID to exclude them
+    const safePage = Number.isFinite(page)
+      ? Math.max(1, Math.floor(page))
+      : 1;
+
     const { users, totalCount } = await getCachedCommunityUsers(
-      safePage, 
+      safePage,
       filter,
-      currentClerkId ?? undefined
+      currentClerkId ?? undefined,
     );
 
-    // Determine if there are more pages
     const skip = (safePage - 1) * USERS_PER_PAGE;
     const hasMore = skip + users.length < totalCount;
 
@@ -145,6 +133,10 @@ export async function getCommunityUsers(
     };
   } catch (error) {
     console.error("[getCommunityUsers] Error:", error);
-    return { success: false, error: "Failed to load community." };
+
+    return {
+      success: false,
+      error: "Failed to load community.",
+    };
   }
 }
