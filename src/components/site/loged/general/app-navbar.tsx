@@ -32,10 +32,14 @@ const NAV_LINKS = [
 
 /* -------------------------------------------------------------------------- */
 /*  App Navbar                                                                 */
+/*                                                                             */
+/*  NOTE: `usePathname()` is runtime-only data on dynamic routes like          */
+/*  /app/calls/[id]. It must live in a component wrapped in <Suspense>, so     */
+/*  AppNavbar itself never calls it. Only <NavLinks /> and                     */
+/*  <CloseOnRouteChange /> do, and both are wrapped below.                     */
 /* -------------------------------------------------------------------------- */
 
 export function AppNavbar() {
-  const pathname = usePathname();
   const { user } = useUser();
   const { signOut } = useClerk();
 
@@ -44,6 +48,8 @@ export function AppNavbar() {
 
   const userMenuRef = React.useRef<HTMLDivElement>(null);
   const searchRef = React.useRef<HTMLInputElement>(null);
+
+  const closeUserMenu = React.useCallback(() => setUserMenuOpen(false), []);
 
   /* -------- Scroll shadow -------- */
   React.useEffect(() => {
@@ -92,13 +98,6 @@ export function AppNavbar() {
     return () => document.removeEventListener("keydown", onKey);
   }, []);
 
-  /* -------- Reset user menu on route change -------- */
-  const [prevPathname, setPrevPathname] = React.useState(pathname);
-  if (prevPathname !== pathname) {
-    setPrevPathname(pathname);
-    setUserMenuOpen(false);
-  }
-
   const initial =
     user?.firstName?.[0]?.toUpperCase() ??
     user?.primaryEmailAddress?.emailAddress?.[0]?.toUpperCase() ??
@@ -115,6 +114,11 @@ export function AppNavbar() {
           : "bg-transparent",
       )}
     >
+      {/* Closes the user menu whenever the route changes (renders nothing) */}
+      <React.Suspense fallback={null}>
+        <CloseOnRouteChange onRouteChange={closeUserMenu} />
+      </React.Suspense>
+
       <nav
         aria-label="App primary"
         className="flex h-16 items-center justify-between gap-4"
@@ -136,32 +140,11 @@ export function AppNavbar() {
         {/* CENTER — nav links + search                                 */}
         {/* ═══════════════════════════════════════════════════════════ */}
         <div className="hidden flex-1 items-center justify-center gap-2 lg:flex">
-          <ul className="flex items-center gap-1">
-            {NAV_LINKS.map((link) => {
-              const isActive =
-                link.href === "/app"
-                  ? pathname === "/app"
-                  : pathname === link.href ||
-                    pathname.startsWith(`${link.href}/`);
-              return (
-                <li key={link.href}>
-                  <Link
-                    href={link.href}
-                    className={cn(
-                      "inline-flex h-9 items-center rounded-full px-4 text-sm font-medium",
-                      "transition-colors duration-200",
-                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-                      isActive
-                        ? "bg-primary/10 text-primary"
-                        : "text-muted-foreground hover:bg-secondary hover:text-foreground",
-                    )}
-                  >
-                    {link.label}
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
+          {/* Fallback renders the same links with no active state, so   */}
+          {/* there is no layout shift when the pathname streams in.     */}
+          <React.Suspense fallback={<NavLinkList pathname={null} />}>
+            <NavLinks />
+          </React.Suspense>
 
           <div className="ml-2 hidden xl:block">
             <div className="relative">
@@ -307,19 +290,19 @@ export function AppNavbar() {
                     href="/app/profile"
                     Icon={UserIcon}
                     label="Profile"
-                    onNavigate={() => setUserMenuOpen(false)}
+                    onNavigate={closeUserMenu}
                   />
                   <MenuItem
                     href="/app/settings"
                     Icon={Settings}
                     label="Settings"
-                    onNavigate={() => setUserMenuOpen(false)}
+                    onNavigate={closeUserMenu}
                   />
                   <MenuItem
                     href="/app/upgrade"
                     Icon={CreditCard}
                     label="Subscription"
-                    onNavigate={() => setUserMenuOpen(false)}
+                    onNavigate={closeUserMenu}
                   />
                 </ul>
 
@@ -349,6 +332,65 @@ export function AppNavbar() {
         </div>
       </nav>
     </header>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Pathname-dependent pieces (must be rendered inside <Suspense>)             */
+/* -------------------------------------------------------------------------- */
+
+/** Reads the pathname and passes it to the link list. */
+function NavLinks() {
+  const pathname = usePathname();
+  return <NavLinkList pathname={pathname} />;
+}
+
+/** Calls `onRouteChange` whenever the pathname changes. Renders nothing. */
+function CloseOnRouteChange({ onRouteChange }: { onRouteChange: () => void }) {
+  const pathname = usePathname();
+
+  React.useEffect(() => {
+    onRouteChange();
+  }, [pathname, onRouteChange]);
+
+  return null;
+}
+
+/* -------------------------------------------------------------------------- */
+/*  NavLinkList — pure markup, used by both the fallback and the real links    */
+/*  `pathname = null` means "unknown yet" → no active state.                   */
+/* -------------------------------------------------------------------------- */
+
+function NavLinkList({ pathname }: { pathname: string | null }) {
+  return (
+    <ul className="flex items-center gap-1">
+      {NAV_LINKS.map((link) => {
+        const isActive =
+          pathname !== null &&
+          (link.href === "/app"
+            ? pathname === "/app"
+            : pathname === link.href || pathname.startsWith(`${link.href}/`));
+
+        return (
+          <li key={link.href}>
+            <Link
+              href={link.href}
+              aria-current={isActive ? "page" : undefined}
+              className={cn(
+                "inline-flex h-9 items-center rounded-full px-4 text-sm font-medium",
+                "transition-colors duration-200",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                isActive
+                  ? "bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:bg-secondary hover:text-foreground",
+              )}
+            >
+              {link.label}
+            </Link>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 

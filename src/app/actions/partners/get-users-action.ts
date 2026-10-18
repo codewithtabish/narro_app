@@ -7,11 +7,11 @@ import { cacheLife, cacheTag } from "next/cache";
 import { CACHE_TAGS } from "@/lib/cache-keys";
 import prisma from "@/lib/clients/prisma-client";
 import {
-    type GetUsersOptions,
-    type GetUsersResult,
-    type PartnerUser,
-    USERS_MAX_PAGE_SIZE,
-    USERS_PAGE_SIZE,
+  type GetUsersOptions,
+  type GetUsersResult,
+  type PartnerUser,
+  USERS_MAX_PAGE_SIZE,
+  USERS_PAGE_SIZE,
 } from "@/types/types";
 
 /* -------------------------------------------------------------------------- */
@@ -103,6 +103,7 @@ async function fetchUsers(
       take: limit,
       select: {
         id: true,
+        clerkUserId: true,
         name: true,
         imageUrl: true,
         profileImageUrl: true,
@@ -123,6 +124,7 @@ async function fetchUsers(
     users: users.map(
       (p): PartnerUser => ({
         id: p.id,
+        clerkUserId: p.clerkUserId,
         name: p.name,
         imageUrl: p.imageUrl,
         profileImageUrl: p.profileImageUrl,

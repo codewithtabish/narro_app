@@ -9,6 +9,7 @@ export const USERS_MAX_PAGE_SIZE = 20;
 
 export interface PartnerUser {
   id: string;
+  clerkUserId: string;
   name: string;
   imageUrl: string | null;
   profileImageUrl: string | null;

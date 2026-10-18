@@ -15,9 +15,19 @@ export const CACHE_TAGS = {
   // ── Users ──
   users: "users",
   user: (clerkId: string) => `user:${clerkId}`,
+  
+  // ── Receiver profile (/app/calls/[id]) ──
+  receiverUser: (clerkId: string) => `receiver-user:${clerkId}`,
 
   // ── Onboarding ──
   onboarding: (clerkId: string) => `onboarding:${clerkId}`,
+
+  // ── PUBLIC LANDING PAGE PREVIEWS ──
+  homepageCommunity: "homepage-community",
+  homepageRooms: "homepage-rooms",
+
+  // ── PUBLIC DIRECTORY PAGES ──
+  communityDirectory: "community-directory", // NEW: For the /community page
 } as const;
 
 // ============================================================
@@ -27,56 +37,128 @@ export const CACHE_TAGS = {
 const NOW = { expire: 0 } as const;
 
 // ─────────────────────────────────────────────
+// PUBLIC DIRECTORY
+// ─────────────────────────────────────────────
+
+/**
+ * Revalidate the full public community directory (/community).
+ * 
+ * Call after: A new user completes onboarding, or a user's public 
+ * profile data changes (name, bio, languages, availability).
+ */
+export function revalidateCommunityDirectory() {
+  revalidateTag(CACHE_TAGS.communityDirectory, NOW);
+  revalidatePath("/community");
+}
+
+// ─────────────────────────────────────────────
+// PUBLIC HOMEPAGE PREVIEWS
+// ─────────────────────────────────────────────
+
+/**
+ * Revalidate the PUBLIC landing page previews (Users + Rooms).
+ */
+export function revalidateHomepagePreviews() {
+  revalidateTag(CACHE_TAGS.homepageCommunity, NOW);
+  revalidateTag(CACHE_TAGS.homepageRooms, NOW);
+  // Revalidate the root landing page path
+  revalidatePath("/");
+}
+
+// ─────────────────────────────────────────────
 // USERS
 // ─────────────────────────────────────────────
 
 /**
  * Revalidate ONE user's cached data.
- * Call after: profile update, avatar change, name change.
  */
 export function revalidateUser(clerkId: string) {
   revalidateTag(CACHE_TAGS.user(clerkId), NOW);
+  revalidateTag(CACHE_TAGS.receiverUser(clerkId), NOW);
   revalidateTag(CACHE_TAGS.users, NOW);
+  
+  // Update public pages
+  revalidateHomepagePreviews(); 
+  revalidateCommunityDirectory();
+
   revalidatePath("/app");
+  revalidatePath("/");
+  revalidatePath("/community");
   revalidatePath("/app", "layout");
 }
 
 /**
  * Revalidate ALL users.
- * Call after: bulk user ops, new user signup, user deletion.
  */
 export function revalidateUsers() {
   revalidateTag(CACHE_TAGS.users, NOW);
+  
+  // Update public pages
+  revalidateHomepagePreviews(); 
+  revalidateCommunityDirectory();
+
   revalidatePath("/app");
   revalidatePath("/app", "layout");
+}
+
+/**
+ * Revalidate ONE user's cached PUBLIC PROFILE only.
+ */
+export function revalidateUserProfile(clerkId: string) {
+  revalidateTag(CACHE_TAGS.user(clerkId), NOW);
+  revalidateTag(CACHE_TAGS.receiverUser(clerkId), NOW);
+  revalidateTag(CACHE_TAGS.users, NOW);
+  
+  // Update public pages (e.g. if they go offline)
+  revalidateHomepagePreviews();
+  revalidateCommunityDirectory();
+  
+  revalidatePath("/app/calls");
+}
+
+// ─────────────────────────────────────────────
+// RECEIVER PROFILE
+// ─────────────────────────────────────────────
+
+export function revalidateReceiverUser(receiverClerkId: string) {
+  revalidateTag(CACHE_TAGS.receiverUser(receiverClerkId), NOW);
+  revalidatePath(`/app/calls/${receiverClerkId}`);
+}
+
+// ─────────────────────────────────────────────
+// CALLS
+// ─────────────────────────────────────────────
+
+export function revalidateCallParticipants(
+  callerClerkId: string,
+  receiverClerkId: string,
+) {
+  revalidateTag(CACHE_TAGS.receiverUser(callerClerkId), NOW);
+  revalidateTag(CACHE_TAGS.receiverUser(receiverClerkId), NOW);
+
+  revalidateTag(CACHE_TAGS.user(callerClerkId), NOW);
+  revalidateTag(CACHE_TAGS.user(receiverClerkId), NOW);
+
+  revalidatePath("/app/calls");
+  revalidatePath(`/app/calls/${callerClerkId}`);
+  revalidatePath(`/app/calls/${receiverClerkId}`);
 }
 
 // ─────────────────────────────────────────────
 // ONBOARDING
 // ─────────────────────────────────────────────
 
-/**
- * Revalidate ONE user's onboarding state.
- * Call after every step of the onboarding flow completes:
- *   - Step 1: Profile saved (name + avatar)
- *   - Step 2: Languages saved
- *   - Step 3: Proficiency levels saved
- *   - Step 4: Bio + interests saved → onboarding completed
- *
- * This is the KEY revalidation that closes the onboarding modal —
- * the layout reads `onboardingCompletedAt`, and once that flips
- * from null to a date, the modal stops rendering.
- */
 export function revalidateOnboarding(clerkId: string) {
-  // Invalidate the onboarding cache for this user
   revalidateTag(CACHE_TAGS.onboarding(clerkId), NOW);
 
-  // Also invalidate the user cache — the user record
-  // (name, languages, avatar, etc.) changed too
   revalidateTag(CACHE_TAGS.user(clerkId), NOW);
+  revalidateTag(CACHE_TAGS.receiverUser(clerkId), NOW);
   revalidateTag(CACHE_TAGS.users, NOW);
 
-  // Refresh the /app path so the layout re-renders without the modal
+  // CRITICAL: Add them to all public directories immediately
+  revalidateHomepagePreviews();
+  revalidateCommunityDirectory();
+
   revalidatePath("/app");
   revalidatePath("/app", "layout");
 }

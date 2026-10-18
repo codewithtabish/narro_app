@@ -29,6 +29,6 @@
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
     "**/*.mts"
-  ],
+, "src/app/(loged)/app/calls/[id]/loading.tss"  ],
   "exclude": ["node_modules"]
 }

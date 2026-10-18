@@ -5,7 +5,7 @@ import { auth } from "@clerk/nextjs/server";
 
 import { INTERESTS, MAX_INTERESTS } from "@/data/interests";
 import { LANGUAGES } from "@/data/languages";
-import { revalidateOnboarding, revalidateUser, revalidateUsers } from "@/lib/cache-keys";
+import { revalidateOnboarding, revalidateUser } from "@/lib/cache-keys";
 import prisma from "@/lib/clients/prisma-client";
 import { getCurrentUserAction } from "../user/get-current-user";
 
@@ -196,7 +196,6 @@ export async function completeProfile(
     /* ── 8. Revalidate caches ──────────────────────────────── */
     revalidateUser(clerkId);
     revalidateOnboarding(clerkId);
-    revalidateUsers()
 
     /* ── 9. Warm the current user cache with fresh data ────── */
     // Fire-and-forget — the modal's `router.refresh()` will then

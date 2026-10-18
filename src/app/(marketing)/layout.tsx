@@ -1,20 +1,59 @@
+// src/app/community/layout.tsx
 import { Footer } from "@/components/site/general/footers/footer";
 import { Container } from "@/components/site/general/layout/container";
-import { Navbar } from "@/components/site/general/navbar/navbar";
-import React from "react";
+import { PublicNavbar } from "@/components/site/general/navbar/public-navbar";
+import { ClientOnly } from "@/components/site/loged/general/push/client-only";
+import { EnablePushBanner } from "@/components/site/loged/general/push/enable-push-banner";
+import { OnboardingGate } from "@/components/site/loged/onboarding/onboarding-gate";
+import { OnboardingGateFallback } from "@/components/site/loged/onboarding/onboarding-gate-fallback";
+import { CallListenerMount } from "@/components/site/pages/community/calling/call-listener-mount";
+import React, { Suspense } from "react";
 
-type MarketingLayoutProps = {
+type CommunityLayoutProps = {
   children: React.ReactNode;
 };
 
-const MarketingLayout = ({ children }: MarketingLayoutProps) => {
-  return <div>
-    <Container>
-    <Navbar/>
-    {children}
-    <Footer/>
-    </Container>
-    </div>;
+const CommunityLayout = ({ children }: CommunityLayoutProps) => {
+  return (
+    <div>
+      <Container>
+        {/* Navbar Suspense for usePathname */}
+        <Suspense fallback={<div className="h-[72px] w-full border-b border-border bg-background/85" />}>
+          <PublicNavbar />
+        </Suspense>
+
+        {/* ✅ ADDED: Push Notification Banner */}
+        {/* This allows users on the public site to subscribe to calls */}
+        <ClientOnly>
+          <div className="mx-auto my-4 w-full max-w-3xl px-4 sm:px-6 lg:px-8">
+            <EnablePushBanner />
+          </div>
+        </ClientOnly>
+        
+        {children}
+        
+        <Footer />
+      </Container>
+
+      {/* 
+        GLOBAL ONBOARDING GATE 
+        This sits outside the Container so it can overlay the whole screen.
+        It checks if the user is logged in and hasn't finished onboarding.
+      */}
+      <Suspense fallback={<OnboardingGateFallback />}>
+        <OnboardingGate />
+      </Suspense>
+
+      {/* 
+        GLOBAL INCOMING CALL LISTENER
+        This listens for Service Worker messages (when someone calls)
+        and shows the full-screen Accept/Decline modal.
+      */}
+      <Suspense fallback={null}>
+        <CallListenerMount />
+      </Suspense>
+    </div>
+  );
 };
 
-export default MarketingLayout;
+export default CommunityLayout;

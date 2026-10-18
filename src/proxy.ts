@@ -5,10 +5,7 @@ import { NextResponse } from "next/server";
 
 import { ADMIN_EMAILS } from "@/lib/admin-emails";
 
-const APP_PREFIXES = ["/app"];
 const ADMIN_PREFIXES = ["/dashboard", "/agent"];
-const AUTH_PREFIXES = ["/sign-in", "/sign-up"];
-
 const PUBLIC_API_PREFIXES = [
   "/api/webhooks",
   "/api/trpc",
@@ -24,9 +21,7 @@ function matchesPrefix(pathname: string, prefixes: string[]): boolean {
 
 function isAdminEmail(email: string | null | undefined): boolean {
   if (!email) return false;
-
   const normalizedEmail = email.trim().toLowerCase();
-
   return ADMIN_EMAILS.some(
     (adminEmail) => adminEmail.trim().toLowerCase() === normalizedEmail,
   );
@@ -36,30 +31,24 @@ export default clerkMiddleware(async (auth, req) => {
   const { pathname } = req.nextUrl;
 
   // Public API endpoints handle their own authorization.
-  // Webhooks must verify their signatures inside their route handlers.
   if (matchesPrefix(pathname, PUBLIC_API_PREFIXES)) {
     return NextResponse.next();
   }
 
-  const { userId, sessionClaims, redirectToSignIn } = await auth();
+  const { userId, sessionClaims } = await auth();
 
-  const isLoggedIn = Boolean(userId);
-  const isAppRoute = matchesPrefix(pathname, APP_PREFIXES);
+  // ── ADMIN PROTECTION ONLY ──
+  // We only protect /dashboard and /agent. Everything else is public.
   const isAdminRoute = matchesPrefix(pathname, ADMIN_PREFIXES);
-  const isAuthRoute = matchesPrefix(pathname, AUTH_PREFIXES);
 
-  // Logged-in users never see the landing page or auth pages -> go to /app.
-  if (isLoggedIn && (pathname === "/" || isAuthRoute)) {
-    return NextResponse.redirect(new URL("/app", req.url));
-  }
+  if (isAdminRoute) {
+    if (!userId) {
+      // Redirect logged-out users to sign-in if they try to access admin
+      const signInUrl = new URL("/sign-in", req.url);
+      signInUrl.searchParams.set("redirect_url", req.url);
+      return NextResponse.redirect(signInUrl);
+    }
 
-  // Logged-out users cannot access /app or admin routes.
-  if (!isLoggedIn && (isAppRoute || isAdminRoute)) {
-    return redirectToSignIn({ returnBackUrl: req.url });
-  }
-
-  // Admin-only routes: /dashboard and /agent.
-  if (isAdminRoute && userId) {
     let role = (
       sessionClaims?.metadata as { role?: string } | undefined
     )?.role;
@@ -85,6 +74,7 @@ export default clerkMiddleware(async (auth, req) => {
       const isAdmin = role === "ADMIN" || isAdminEmail(email);
 
       if (!isAdmin) {
+        // Non-admins trying to access admin routes get sent to the app
         return NextResponse.redirect(new URL("/app", req.url));
       }
     } catch (error) {
@@ -94,6 +84,10 @@ export default clerkMiddleware(async (auth, req) => {
     }
   }
 
+  // ── EVERYTHING ELSE IS PUBLIC ──
+  // We explicitly do NOT redirect logged-in users away from "/" or "/sign-in".
+  // We do NOT redirect logged-out users away from "/app" or "/community".
+  // The Client Components and Server Actions handle the authentication gates.
   return NextResponse.next();
 });
 

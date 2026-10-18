@@ -1,24 +1,40 @@
-import { AgentsSection } from "./agents"
-import { AIPracticeSection } from "./ai-practice"
-import { CallsSection } from "./calls"
-import { FinalCtaSection } from "./final-cta"
-import { HeroSection } from "./hero-section"
-import { RoomsSection } from "./rooms"
-import { TestimonialsSection } from "./testimonials"
+import { Suspense } from "react";
+
+import { CommunitySection } from "./public/community-section";
+import { FeaturesRow } from "./public/features-row";
+import { HomepageAgents } from "./public/homepage-agents"; // <-- Imported
+import { HomepageCommunity, HomepageCommunitySkeleton } from "./public/homepage-community";
+import { HomepageRooms, HomepageRoomsSkeleton } from "./public/homepage-rooms";
+import { MobileAppSection } from "./public/mobile-app-section";
+import { TestimonialsSection } from "./public/testimonials-section";
 
 const LandingPage = () => {
   return (
     <main>
-      <HeroSection/>
-      <AIPracticeSection/>
-      <CallsSection/>
-      <RoomsSection/>
-      <AgentsSection/>
-      <TestimonialsSection/>
-      <FinalCtaSection/>
-      
-    </main>
-  )
-}
+      <CommunitySection />
+      <FeaturesRow />
 
-export default LandingPage
+      {/* ================================================================ */}
+      {/* REAL DATA SECTIONS                                               */}
+      {/* ================================================================ */}
+      
+      {/* 1. Community Users Preview (6 real users from DB) */}
+      <Suspense fallback={<HomepageCommunitySkeleton />}>
+        <HomepageCommunity />
+      </Suspense>
+
+      {/* 2. Live Rooms Preview (Mocked data) */}
+      <Suspense fallback={<HomepageRoomsSkeleton />}>
+        <HomepageRooms />
+      </Suspense>
+
+      {/* 3. AI Agents Preview (Static data - No Suspense needed) */}
+      <HomepageAgents />
+
+      <TestimonialsSection />
+      <MobileAppSection />
+    </main>
+  );
+};
+
+export default LandingPage;

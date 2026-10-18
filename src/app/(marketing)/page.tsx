@@ -1,4 +1,4 @@
-import LandingPage from '@/components/site/pages/marketing/landing-page'
+import LandingPage from "@/components/site/pages/marketing/landing-page"
 
 const MARKETINGPAGE = () => {
   return (

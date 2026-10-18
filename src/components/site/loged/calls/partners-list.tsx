@@ -1,5 +1,6 @@
-import { MessageCircle, Phone } from "lucide-react";
+// src/components/partners/PartnersList.tsx
 import Image from "next/image";
+import Link from "next/link";
 
 import { getUsers } from "@/app/actions/partners/get-users-action";
 import { getInterestEmoji, getInterestLabel } from "@/data/interests";
@@ -9,6 +10,7 @@ import type { PartnerUser } from "@/types/types";
 
 /* -------------------------------------------------------------------------- */
 /*  Partners List — all users                                                  */
+/*  Every card is one link → /calls/[clerkUserId]                              */
 /* -------------------------------------------------------------------------- */
 
 interface PartnersListProps {
@@ -52,6 +54,45 @@ export async function PartnersList({
 }
 
 /* -------------------------------------------------------------------------- */
+/*  Helpers                                                                    */
+/* -------------------------------------------------------------------------- */
+
+// The profile page (/calls/[id]) loads the receiver by CLERK user id.
+// Make sure `clerkUserId` is selected in getUsers and present on PartnerUser.
+function profileHref(user: PartnerUser) {
+  return `/app/calls/${user.clerkUserId}`;
+}
+
+const cardLinkClasses = cn(
+  "group flex w-full overflow-hidden rounded-3xl bg-card",
+  "ring-1 ring-border/60",
+  "transition-shadow duration-200 hover:shadow-md",
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
+);
+
+function formatLearning(user: PartnerUser, max: number) {
+  return (
+    user.languagesLearning
+      .slice(0, max)
+      .map((code) => {
+        const level = user.proficiencyByLanguage?.[code];
+        const name = getLanguageName(code);
+        return level ? `${name} (${level.charAt(0)})` : name;
+      })
+      .join(", ") || "—"
+  );
+}
+
+function formatSpeaks(user: PartnerUser, max: number) {
+  return (
+    user.languagesSpoken
+      .slice(0, max)
+      .map((code) => getLanguageName(code))
+      .join(", ") || "—"
+  );
+}
+
+/* -------------------------------------------------------------------------- */
 /*  ListView — full-width rows                                                 */
 /* -------------------------------------------------------------------------- */
 
@@ -61,127 +102,59 @@ function ListView({ users }: { users: PartnerUser[] }) {
       {users.map((user) => {
         const avatarUrl = user.profileImageUrl ?? user.imageUrl ?? null;
         const initial = user.name?.[0]?.toUpperCase() ?? "?";
-        const isAvailable = user.isAvailable;
         const topInterests = user.interests.slice(0, 3);
 
         return (
-          <li
-            key={user.id}
-            className={cn(
-              "group relative flex w-full overflow-hidden rounded-3xl bg-card",
-              "ring-1 ring-border/60",
-              "transition-shadow duration-200 hover:shadow-md",
-              // Stack vertically on mobile, row on desktop
-              "flex-col sm:flex-row",
-            )}
-          >
-            {/* Avatar — square left column */}
-            <div
-              className={cn(
-                "relative shrink-0 bg-background",
-                // Mobile: square banner
-                "aspect-3/2 w-full",
-                // Desktop: narrow vertical strip
-                "sm:aspect-auto sm:w-[120px] sm:self-stretch lg:w-[140px]",
-              )}
+          <li key={user.id} className="w-full">
+            <Link
+              href={profileHref(user)}
+              aria-label={`View ${user.name}'s profile`}
+              className={cn(cardLinkClasses, "flex-col sm:flex-row")}
             >
-              <AvatarImage
-                src={avatarUrl}
-                alt={user.name}
-                initial={initial}
-                sizes="(max-width: 640px) 100vw, 140px"
-              />
-              <StatusBadge isAvailable={isAvailable} />
-            </div>
-
-            {/* Info */}
-            <div className="flex min-w-0 flex-1 flex-col justify-center p-4 sm:p-5 lg:p-6">
-              <h3 className="truncate text-base font-semibold text-foreground sm:text-lg">
-                {user.name}
-              </h3>
-
-              <dl className="mt-2 flex flex-col gap-0.5 text-[13px] sm:text-sm">
-                <LanguageRow
-                  label="Speaks"
-                  value={
-                    user.languagesSpoken
-                      .slice(0, 3)
-                      .map((code) => getLanguageName(code))
-                      .join(", ") || "—"
-                  }
-                />
-                <LanguageRow
-                  label="Learning"
-                  value={
-                    user.languagesLearning
-                      .slice(0, 3)
-                      .map((code) => {
-                        const level = user.proficiencyByLanguage?.[code];
-                        const name = getLanguageName(code);
-                        return level ? `${name} (${level.charAt(0)})` : name;
-                      })
-                      .join(", ") || "—"
-                  }
-                />
-              </dl>
-
-              {user.bio && (
-                <p className="mt-3 line-clamp-2 text-[13px] italic leading-relaxed text-muted-foreground">
-                  {user.bio}
-                </p>
-              )}
-
-              {topInterests.length > 0 && (
-                <div className="mt-3">
-                  <InterestTags items={topInterests} />
-                </div>
-              )}
-            </div>
-
-            {/* Actions — full width row on mobile, column on desktop */}
-            <div
-              className={cn(
-                "flex shrink-0 gap-2 px-4 pb-4 sm:px-4 sm:pb-4 lg:px-6 lg:py-6",
-                "flex-row",
-                "sm:flex-col sm:self-center sm:px-4 sm:py-4",
-                "lg:w-auto lg:flex-none",
-              )}
-            >
-              <button
-                type="button"
+              {/* Avatar */}
+              <div
                 className={cn(
-                  "inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-full",
-                  "bg-primary text-primary-foreground",
-                  "text-sm font-semibold",
-                  "shadow-[0_6px_16px_-6px_var(--color-primary)]",
-                  "transition-all duration-200",
-                  "hover:bg-primary/90",
-                  "active:scale-[0.98]",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-card",
-                  "sm:w-28 sm:flex-none lg:w-32",
+                  "relative shrink-0 bg-background",
+                  "aspect-3/2 w-full",
+                  "sm:aspect-auto sm:w-[120px] sm:self-stretch lg:w-[140px]",
                 )}
               >
-                <Phone className="h-4 w-4" strokeWidth={2.25} />
-                Call
-              </button>
+                <AvatarImage
+                  src={avatarUrl}
+                  alt={user.name}
+                  initial={initial}
+                  sizes="(max-width: 640px) 100vw, 140px"
+                />
+                <StatusBadge isAvailable={user.isAvailable} />
+              </div>
 
-              <button
-                type="button"
-                className={cn(
-                  "inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-full",
-                  "border border-border bg-card text-foreground",
-                  "text-sm font-semibold",
-                  "transition-all duration-200",
-                  "hover:border-primary/40 hover:bg-primary/5",
-                  "active:scale-[0.98]",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-card",
-                  "sm:w-28 sm:flex-none lg:w-32",
+              {/* Info */}
+              <div className="flex min-w-0 flex-1 flex-col justify-center p-4 sm:p-5 lg:p-6">
+                <h3 className="truncate text-base font-semibold text-foreground sm:text-lg">
+                  {user.name}
+                </h3>
+
+                <dl className="mt-2 flex flex-col gap-0.5 text-[13px] sm:text-sm">
+                  <LanguageRow label="Speaks" value={formatSpeaks(user, 3)} />
+                  <LanguageRow
+                    label="Learning"
+                    value={formatLearning(user, 3)}
+                  />
+                </dl>
+
+                {user.bio && (
+                  <p className="mt-3 line-clamp-2 text-[13px] italic leading-relaxed text-muted-foreground">
+                    {user.bio}
+                  </p>
                 )}
-              >
-                <MessageCircle className="h-4 w-4" strokeWidth={2.25} />
-                Message
-              </button>
-            </div>
+
+                {topInterests.length > 0 && (
+                  <div className="mt-3">
+                    <InterestTags items={topInterests} />
+                  </div>
+                )}
+              </div>
+            </Link>
           </li>
         );
       })}
@@ -198,7 +171,6 @@ function GridView({ users }: { users: PartnerUser[] }) {
     <ul
       className={cn(
         "grid w-full gap-4",
-        // Fully responsive — 1 col → 2 col → 3 col → 4 col
         "grid-cols-1",
         "sm:grid-cols-2",
         "lg:grid-cols-3",
@@ -208,101 +180,47 @@ function GridView({ users }: { users: PartnerUser[] }) {
       {users.map((user) => {
         const avatarUrl = user.profileImageUrl ?? user.imageUrl ?? null;
         const initial = user.name?.[0]?.toUpperCase() ?? "?";
-        const isAvailable = user.isAvailable;
         const topInterests = user.interests.slice(0, 2);
 
         return (
-          <li
-            key={user.id}
-            className={cn(
-              "group flex flex-col overflow-hidden rounded-3xl bg-card",
-              "ring-1 ring-border/60",
-              "transition-shadow duration-200 hover:shadow-md",
-            )}
-          >
-            {/* Avatar — square top */}
-            <div className="relative aspect-square w-full bg-background">
-              <AvatarImage
-                src={avatarUrl}
-                alt={user.name}
-                initial={initial}
-                sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
-              />
-              <StatusBadge isAvailable={isAvailable} />
-            </div>
-
-            {/* Info */}
-            <div className="flex flex-1 flex-col gap-2 p-4">
-              <h3 className="truncate text-base font-semibold text-foreground">
-                {user.name}
-              </h3>
-
-              <dl className="flex flex-col gap-0.5 text-[12px]">
-                <LanguageRow
-                  label="Speaks"
-                  value={
-                    user.languagesSpoken
-                      .slice(0, 2)
-                      .map((code) => getLanguageName(code))
-                      .join(", ") || "—"
-                  }
+          <li key={user.id} className="flex">
+            <Link
+              href={profileHref(user)}
+              aria-label={`View ${user.name}'s profile`}
+              className={cn(cardLinkClasses, "flex-col")}
+            >
+              {/* Avatar — square top */}
+              <div className="relative aspect-square w-full bg-background">
+                <AvatarImage
+                  src={avatarUrl}
+                  alt={user.name}
+                  initial={initial}
+                  sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
                 />
-                <LanguageRow
-                  label="Learning"
-                  value={
-                    user.languagesLearning
-                      .slice(0, 2)
-                      .map((code) => {
-                        const level = user.proficiencyByLanguage?.[code];
-                        const name = getLanguageName(code);
-                        return level ? `${name} (${level.charAt(0)})` : name;
-                      })
-                      .join(", ") || "—"
-                  }
-                />
-              </dl>
-
-              {topInterests.length > 0 && (
-                <div className="mt-1">
-                  <InterestTags items={topInterests} />
-                </div>
-              )}
-
-              {/* Actions — pushed to bottom */}
-              <div className="mt-auto flex gap-2 pt-3">
-                <button
-                  type="button"
-                  className={cn(
-                    "inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-full",
-                    "bg-primary text-primary-foreground",
-                    "text-[13px] font-semibold",
-                    "shadow-[0_6px_16px_-6px_var(--color-primary)]",
-                    "transition-all duration-200",
-                    "hover:bg-primary/90",
-                    "active:scale-[0.98]",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-card",
-                  )}
-                >
-                  <Phone className="h-3.5 w-3.5" strokeWidth={2.25} />
-                  Call
-                </button>
-
-                <button
-                  type="button"
-                  aria-label={`Message ${user.name}`}
-                  className={cn(
-                    "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full",
-                    "border border-border bg-card text-foreground",
-                    "transition-all duration-200",
-                    "hover:border-primary/40 hover:bg-primary/5",
-                    "active:scale-[0.98]",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-card",
-                  )}
-                >
-                  <MessageCircle className="h-3.5 w-3.5" strokeWidth={2.25} />
-                </button>
+                <StatusBadge isAvailable={user.isAvailable} />
               </div>
-            </div>
+
+              {/* Info */}
+              <div className="flex flex-1 flex-col gap-2 p-4">
+                <h3 className="truncate text-base font-semibold text-foreground">
+                  {user.name}
+                </h3>
+
+                <dl className="flex flex-col gap-0.5 text-[12px]">
+                  <LanguageRow label="Speaks" value={formatSpeaks(user, 2)} />
+                  <LanguageRow
+                    label="Learning"
+                    value={formatLearning(user, 2)}
+                  />
+                </dl>
+
+                {topInterests.length > 0 && (
+                  <div className="mt-1">
+                    <InterestTags items={topInterests} />
+                  </div>
+                )}
+              </div>
+            </Link>
           </li>
         );
       })}
