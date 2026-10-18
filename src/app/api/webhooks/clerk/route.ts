@@ -7,7 +7,6 @@ import { Webhook } from "svix";
 import { ADMIN_EMAILS } from "@/lib/admin-emails";
 import prisma from "@/lib/clients/prisma-client";
 
-
 function getPrimaryEmail(data: {
   email_addresses?: Array<{
     id: string;
@@ -102,23 +101,52 @@ export async function POST(req: Request) {
         const name = getFullName(data);
         const admin = isAdminEmail(email);
 
-        await prisma.user.upsert({
-          where: {
-            clerkUserId: data.id,
-          },
-          update: {
-            name,
-            email,
-            imageUrl: data.image_url ?? null,
-          },
-          create: {
-            clerkUserId: data.id,
-            name,
-            email,
-            imageUrl: data.image_url ?? null,
-            status: "OFFLINE",
-          },
+        // ✅ FIX: Check by clerkUserId first
+        let user = await prisma.user.findUnique({
+          where: { clerkUserId: data.id },
         });
+
+        if (user) {
+          // User exists by Clerk ID → Update them
+          user = await prisma.user.update({
+            where: { id: user.id },
+            data: {
+              name,
+              email,
+              imageUrl: data.image_url ?? null,
+            },
+          });
+        } else if (email) {
+          // User doesn't exist by Clerk ID, but does the email exist?
+          const existingByEmail = await prisma.user.findUnique({
+            where: { email },
+          });
+
+          if (existingByEmail) {
+            // ✅ FIX: Email exists → Re-link the old DB user to the new Clerk ID
+            user = await prisma.user.update({
+              where: { id: existingByEmail.id },
+              data: {
+                clerkUserId: data.id,
+                name,
+                imageUrl: data.image_url ?? null,
+              },
+            });
+          }
+        }
+
+        // If still no user found, create a brand new one
+        if (!user) {
+          user = await prisma.user.create({
+            data: {
+              clerkUserId: data.id,
+              name,
+              email,
+              imageUrl: data.image_url ?? null,
+              status: "OFFLINE",
+            },
+          });
+        }
 
         console.log("[NARRO Clerk Webhook] User synced:", {
           clerkUserId: data.id,
