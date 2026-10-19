@@ -6,7 +6,11 @@ import { after } from "next/server";
 import { z } from "zod";
 
 import { revalidateSingleRoom } from "@/lib/cache-keys";
-import { createLiveKitToken, listLiveKitParticipants } from "@/lib/clients/livekit-client";
+import {
+  createLiveKitToken,
+  listLiveKitParticipants,
+  livekitRoomService // ✅ Import to kick ghost sessions
+} from "@/lib/clients/livekit-client";
 import prisma from "@/lib/clients/prisma-client";
 
 const inputSchema = z.object({
@@ -41,7 +45,7 @@ export async function joinRoom(
       }),
       prisma.room.findUnique({
         where: { id: roomId },
-        select: { id: true, status: true, liveKitRoomName: true },
+        select: { id: true, status: true, liveKitRoomName: true, hostId: true },
       }),
     ]);
 
@@ -52,30 +56,38 @@ export async function joinRoom(
     const liveKitUrl = process.env.LIVEKIT_URL;
     if (!liveKitUrl) return { success: false, error: "LiveKit not configured." };
 
-    /* ── 2. Check for Duplicate Connection ── */
+    /* ── 2. Ghost Session Cleanup ── */
+    // ✅ Instead of blocking, we kick the old session out.
     try {
       const activeParticipants = await listLiveKitParticipants(room.liveKitRoomName);
       const isAlreadyConnected = activeParticipants.some((p) => p.identity === me.id);
 
       if (isAlreadyConnected) {
-        return { 
-          success: false, 
-          error: "You are already connected to this room in another tab or window." 
-        };
+        // Force disconnect the old session
+        await livekitRoomService.removeParticipant(room.liveKitRoomName, me.id);
+        
+        // Wait 600ms for LiveKit to process the disconnect
+        await new Promise((resolve) => setTimeout(resolve, 600));
       }
     } catch {
-      // ✅ FIXED: Removed unused 'err' variable. 
       // If the room isn't fully initialized in LiveKit yet, ignore and proceed.
     }
 
-    /* ── 3. Generate Token ── */
+    /* ── 3. Get Role & Generate Token ── */
+    const isHost = room.hostId === me.id;
+    const speakerRequest = await prisma.roomSpeakerRequest.findUnique({
+      where: { roomId_userId: { roomId, userId: me.id } },
+    });
+    const isSpeaker = isHost || speakerRequest?.status === "APPROVED";
+    const role = isHost ? "host" : isSpeaker ? "speaker" : "listener";
+    
     const avatarUrl = me.profileImageUrl ?? me.imageUrl ?? null;
 
     const token = await createLiveKitToken({
       roomName: room.liveKitRoomName,
       participantId: me.id,
       participantName: me.name,
-      metadata: JSON.stringify({ avatarUrl }),
+      metadata: JSON.stringify({ avatarUrl, role }), // ✅ Passed role
       ttl: 60 * 60,
     });
 

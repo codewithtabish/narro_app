@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { handleSpeakerRequest } from "@/app/actions/rooms/approve-speaker";
 import { cancelSpeakerRequest } from "@/app/actions/rooms/cancel-speaker-request";
@@ -50,12 +50,24 @@ export function RoomAudioUI({
   const [isPending, setIsPending] = useState(false);
   const [dialogType, setDialogType] = useState<"leave" | "delete" | null>(null);
   const [hasRequested, setHasRequested] = useState(!!myPendingRequestId);
-  
-  // ✅ FIXED: Properly typed instead of 'any'
   const [selectedParticipant, setSelectedParticipant] = useState<{ identity: string; name: string } | null>(null);
 
-  // ✅ Poll for new requests if Host
   useSpeakerRequests(isHost);
+
+  // ✅ 1. Handle Tab Close / Refresh (Before Unload)
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      // Trigger the native browser "Leave site?" warning
+      e.preventDefault();
+      e.returnValue = "";
+      
+      // ✅ Fire the leave action in the background to disconnect from LiveKit
+      leaveRoom({ roomId }).catch(console.error);
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [roomId]);
 
   const handleLeave = () => {
     setDialogType(null);
@@ -383,7 +395,6 @@ function AudioGrid({ isHost, onSelectParticipant }: { isHost: boolean; onSelectP
               }}
             >
               <div className="relative">
-                {/* ✅ Terracotta Glowing Ring for Speakers/Host */}
                 {isSpeaker && (
                   <motion.div
                     initial={{ opacity: 0, scale: 0.8 }}
@@ -407,8 +418,8 @@ function AudioGrid({ isHost, onSelectParticipant }: { isHost: boolean; onSelectP
                 <div
                   className={cn(
                     "relative flex h-24 w-24 sm:h-32 sm:w-32 items-center justify-center rounded-full border-[3px] transition-all duration-300 overflow-hidden shadow-sm",
-                    isHostRole ? "border-[#FAF9F6]" // Gold/White ring for Host
-                    : isSpeaker ? "border-[#6B4A3A]" // Terracotta ring for Speaker
+                    isHostRole ? "border-[#FAF9F6]" 
+                    : isSpeaker ? "border-[#6B4A3A]" 
                     : "border-border"
                   )}
                 >
@@ -422,21 +433,18 @@ function AudioGrid({ isHost, onSelectParticipant }: { isHost: boolean; onSelectP
                     </div>
                   )}
 
-                  {/* ✅ Overlapping Crown Badge for Host */}
                   {isHostRole && (
                     <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 flex h-7 w-7 items-center justify-center rounded-full bg-[#6B4A3A] border-2 border-background shadow-lg z-10">
                       <Crown size={12} className="text-[#FAF9F6]" />
                     </div>
                   )}
 
-                  {/* Role Badge for Speakers */}
                   {role === "speaker" && (
                     <div className="absolute bottom-1 right-1 flex h-6 w-6 items-center justify-center rounded-full bg-background shadow-md">
                       <Mic size={12} className="text-[#10B981]" />
                     </div>
                   )}
 
-                  {/* Role Badge for Listeners */}
                   {role === "listener" && (
                     <div className="absolute bottom-1 right-1 flex h-6 w-6 items-center justify-center rounded-full bg-background shadow-md">
                       <Headphones size={12} className="text-neutral-400" />

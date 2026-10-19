@@ -41,11 +41,16 @@ export default async function ActiveRoomPage(props: {
     where: { clerkUserId: userId },
     select: { id: true },
   });
+
+  // ✅ Guard clause: If the user isn't in the DB yet, kick them back to rooms
+  if (!me) {
+    redirect("/rooms");
+  }
   
-  const isHost = room.hostId === me?.id;
+  const isHost = room.hostId === me.id;
 
   const speakerRequest = await prisma.roomSpeakerRequest.findUnique({
-    where: { roomId_userId: { roomId, userId: me?.id ?? "" } },
+    where: { roomId_userId: { roomId, userId: me.id } },
   });
 
   const isSpeaker = speakerRequest?.status === "APPROVED";
@@ -53,7 +58,7 @@ export default async function ActiveRoomPage(props: {
 
   // ✅ 2. Fetch the Waiting Room queue
   const pendingRequests = await getSpeakerRequests(roomId);
-  const myPendingRequestId = pendingRequests.find(r => r.userId === me?.id)?.id || null;
+  const myPendingRequestId = pendingRequests.find(r => r.userId === me.id)?.id || null;
 
   return (
     <RoomWrapper
