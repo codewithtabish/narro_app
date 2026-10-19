@@ -9,14 +9,8 @@ import {
 } from "@livekit/components-react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
-  Check,
-  Crown,
-  Hand,
-  Headphones,
-  Loader2, Lock, Mic, MicOff,
-  MicOffIcon,
-  PhoneOff, Trash2, Volume2,
-  X
+  Check, Crown, Hand, Headphones, Loader2, Lock, Mic, MicOff,
+  MicOffIcon, PhoneOff, Trash2, Volume2, X
 } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -29,7 +23,7 @@ import { leaveRoom } from "@/app/actions/rooms/leave-room";
 import { muteParticipant } from "@/app/actions/rooms/mute-participant";
 import { removeFromStage } from "@/app/actions/rooms/remove-from-stage";
 import { requestSpeaker } from "@/app/actions/rooms/request-speaker";
-// ❌ REMOVED: import { useSpeakerRequests } from "@/hooks/use-speaker-requests";
+import { useSpeakerRequests } from "@/hooks/use-speaker-requests"; // ✅ Bring back the hook
 import { cn } from "@/lib/utils";
 
 interface RoomAudioUIProps {
@@ -54,7 +48,8 @@ export function RoomAudioUI({
   
   const intentionalLeaveRef = useRef(false);
 
-  // ❌ REMOVED: useSpeakerRequests(isHost);
+  // ✅ THE FIX: Bring back the polling hook so the Host sees the guest's chair
+  useSpeakerRequests(isHost);
 
   // Lock page scroll
   useEffect(() => {
