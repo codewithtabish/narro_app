@@ -70,8 +70,7 @@ export function RoomAudioUI({ token, serverUrl, roomId, roomTitle, isHost }: Roo
         audio={true}
         video={false}
         onDisconnected={handleDisconnected}
-        // ✅ NO BACKGROUND, NO GLOW. Inherits your app's theme.
-        className="fixed inset-0 z-100 flex h-dvh w-screen flex-col overflow-hidden text-foreground"
+        className="flex h-full w-full flex-col overflow-hidden bg-background text-foreground"
       >
         {/* Top Header */}
         <motion.header 
@@ -101,7 +100,7 @@ export function RoomAudioUI({ token, serverUrl, roomId, roomTitle, isHost }: Roo
 
         {/* Scrollable Center Area */}
         <div className="relative z-10 flex-1 overflow-y-auto custom-scrollbar">
-          <div className="flex min-h-full items-center justify-center p-4 pt-24 pb-48">
+          <div className="flex min-h-full items-center justify-center p-4 pt-32 pb-48">
             <AudioGrid />
           </div>
         </div>
@@ -186,7 +185,7 @@ function AudioGrid() {
   const { localParticipant } = useLocalParticipant();
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-12 max-w-3xl w-full place-items-center">
+    <div className="grid grid-cols-2 md:grid-cols-3 gap-x-8 gap-y-12 sm:gap-x-12 sm:gap-y-16 max-w-4xl w-full place-items-center">
       <AnimatePresence>
         {participants.map((p) => {
           const isSpeaking = p.isSpeaking;
@@ -213,36 +212,45 @@ function AudioGrid() {
                   <motion.div
                     initial={{ opacity: 0, scale: 0.8 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    className="absolute -inset-3 rounded-full border-2 border-primary"
+                    className="absolute -inset-2 rounded-full border-2 border-[#6B4A3A]"
                     style={{ zIndex: -1 }}
                   >
                     <motion.div 
-                      animate={{ scale: [1, 1.1, 1], opacity: [0.4, 0.8, 0.4] }}
-                      transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
-                      className="absolute inset-0 rounded-full border-2 border-primary"
+                      animate={{ scale: [1, 1.05, 1], opacity: [0.3, 0.6, 0.3] }}
+                      transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                      className="absolute inset-0 rounded-full border-2 border-[#6B4A3A]"
                     />
                   </motion.div>
                 )}
 
                 <div
                   className={cn(
-                    "relative flex h-24 w-24 sm:h-28 sm:w-28 md:h-32 md:w-32 items-center justify-center rounded-full border-[3px] transition-all duration-300 overflow-hidden shadow-xl",
+                    "relative flex h-24 w-24 sm:h-32 sm:w-32 items-center justify-center rounded-full border-[3px] transition-all duration-300 overflow-hidden shadow-sm",
                     isSpeaking 
-                      ? "border-foreground shadow-[0_0_30px_rgba(107,74,58,0.8)]" 
+                      ? "border-[#6B4A3A]" 
                       : "border-border"
                   )}
                 >
                   {avatarUrl ? (
-                    <Image src={avatarUrl} alt={p.name || "User"} fill sizes="(max-width: 768px) 100vw, 160px" className="object-cover" />
+                    <Image 
+                      src={avatarUrl} 
+                      alt={p.name || "User"} 
+                      fill 
+                      sizes="(max-width: 768px) 100vw, 160px" 
+                      className="object-cover" 
+                    />
                   ) : (
-                    <div className="flex h-full w-full items-center justify-center bg-muted text-2xl font-serif text-foreground">
-                      {p.name?.[0]?.toUpperCase() ?? "?"}
+                    // ✅ Clean, elegant Terracotta fallback for no-avatar users
+                    <div className="flex h-full w-full items-center justify-center bg-[#6B4A3A] text-white">
+                      <span className="text-4xl sm:text-5xl font-serif font-medium">
+                        {p.name?.[0]?.toUpperCase() ?? "?"}
+                      </span>
                     </div>
                   )}
                 </div>
               </div>
               
-              <span className="text-[14px] sm:text-[16px] font-medium text-foreground tracking-wide">
+              <span className="text-[14px] sm:text-[15px] font-medium text-foreground tracking-wide">
                 {isLocal ? "You" : p.name || "Guest"}
               </span>
             </motion.div>
@@ -268,28 +276,28 @@ function ControlDock({ onLeave }: { onLeave: () => void }) {
   };
 
   return (
-    <div className="flex items-center gap-4 sm:gap-6 rounded-full bg-muted px-4 sm:px-8 py-3 sm:py-4 backdrop-blur-xl border border-border shadow-2xl">
+    <div className="flex items-center gap-5 sm:gap-6 rounded-full bg-white/70 dark:bg-black/50 px-5 sm:px-6 py-3 sm:py-4 backdrop-blur-xl border border-black/5 dark:border-white/10 shadow-xl">
       <button
         onClick={toggleMic}
         className={cn(
-          "flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-full transition-all duration-200 active:scale-95",
+          "flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-full transition-all duration-200 active:scale-95 shadow-sm",
           isMuted 
-            ? "bg-red-500/20 text-red-500 hover:bg-red-500/30" 
-            : "bg-background text-foreground hover:bg-background/80"
+            ? "bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-400" 
+            : "bg-neutral-100 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-700"
         )}
       >
-        {isMuted ? <MicOff size={20} className="sm:w-[22px] sm:h-[22px]" /> : <Mic size={20} className="sm:w-[22px] sm:h-[22px]" />}
+        {isMuted ? <MicOff size={22} /> : <Mic size={22} />}
       </button>
 
       <button 
         onClick={onLeave}
-        className="flex h-14 w-14 sm:h-16 sm:w-16 items-center justify-center rounded-full bg-red-500 text-white shadow-lg transition-transform hover:scale-105 active:scale-95"
+        className="flex h-14 w-14 sm:h-16 sm:w-16 items-center justify-center rounded-full bg-[#EF4444] text-white shadow-lg transition-transform hover:scale-105 active:scale-95"
       >
-        <PhoneOff size={24} className="sm:w-[26px] sm:h-[26px]" />
+        <PhoneOff size={26} />
       </button>
 
-      <button className="flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-full bg-background text-foreground hover:bg-background/80 transition-all duration-200 active:scale-95">
-        <Volume2 size={20} className="sm:w-[22px] sm:h-[22px]" />
+      <button className="flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-full bg-neutral-100 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-700 shadow-sm transition-all duration-200 active:scale-95">
+        <Volume2 size={22} />
       </button>
     </div>
   );

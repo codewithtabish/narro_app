@@ -7,13 +7,11 @@ import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
 
-// ✅ THE FIX: Tell Next.js it's okay to block this route because it needs live data (tokens)
 export const instant = false;
 
 export default async function ActiveRoomPage(props: {
   params: Promise<{ roomId: string }>;
 }) {
-  // ✅ Force this page to run at request time, not build time.
   await connection();
 
   const params = await props.params;
@@ -22,7 +20,7 @@ export default async function ActiveRoomPage(props: {
   if (!roomId) redirect("/rooms");
 
   const { userId } = await auth();
-  if (!userId) redirect("/sign-in");
+  if (!userId) redirect("/rooms");
 
   const room = await getRoomById(roomId);
   if (!room) redirect("/rooms");
@@ -31,7 +29,7 @@ export default async function ActiveRoomPage(props: {
   
   if (!joinResult.success) {
     return (
-      <div className="flex h-screen items-center justify-center bg-[#1A1613] text-white">
+      <div className="flex h-screen items-center justify-center bg-background text-foreground">
         <p>Failed to join: {joinResult.error}</p>
       </div>
     );
