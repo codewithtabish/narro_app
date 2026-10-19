@@ -54,17 +54,21 @@ export function RoomAudioUI({
 
   useSpeakerRequests(isHost);
 
-  // ✅ 1. Handle Tab Close / Refresh (Before Unload)
+  // ✅ Lock scroll on mount to prevent the page behind from scrolling
+  useEffect(() => {
+    const originalStyle = window.getComputedStyle(document.body).overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = originalStyle;
+    };
+  }, []);
+
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      // Trigger the native browser "Leave site?" warning
       e.preventDefault();
       e.returnValue = "";
-      
-      // ✅ Fire the leave action in the background to disconnect from LiveKit
       leaveRoom({ roomId }).catch(console.error);
     };
-
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [roomId]);
@@ -121,7 +125,8 @@ export function RoomAudioUI({
         audio={initialRole !== "listener"}
         video={false}
         onDisconnected={handleDisconnected}
-        className="relative flex h-full w-full flex-col overflow-hidden text-foreground"
+        // ✅ FIXED: Added z-[9999] to sit on top of footer, added `bg-background` to make it fully opaque.
+        className="fixed inset-0 z-9999 flex h-dvh w-screen flex-col overflow-hidden bg-background text-foreground"
       >
         {/* Top Header */}
         <motion.header 
@@ -251,7 +256,7 @@ export function RoomAudioUI({
       {/* Host Moderation Dialog */}
       <AnimatePresence>
         {selectedParticipant && (
-          <div className="fixed inset-0 z-120 flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-10000 flex items-center justify-center p-4">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -302,7 +307,7 @@ export function RoomAudioUI({
       {/* Leave / Delete Dialog */}
       <AnimatePresence>
         {dialogType && (
-          <div className="fixed inset-0 z-110 flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-10000 flex items-center justify-center p-4">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
