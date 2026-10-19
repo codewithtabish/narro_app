@@ -4,11 +4,14 @@
 import { cacheLife, cacheTag } from "next/cache";
 
 import { CACHE_TAGS } from "@/lib/cache-keys";
+import { listLiveKitParticipants } from "@/lib/clients/livekit-client";
 import prisma from "@/lib/clients/prisma-client";
 
-/* -------------------------------------------------------------------------- */
-/*  Types                                                                      */
-/* -------------------------------------------------------------------------- */
+export interface RoomParticipant {
+  identity: string;
+  name: string;
+  avatarUrl: string | null;
+}
 
 export interface RoomData {
   id: string;
@@ -23,15 +26,12 @@ export interface RoomData {
     imageUrl: string | null;
     profileImageUrl: string | null;
   };
+  participants: RoomParticipant[];
 }
 
 export type GetRoomsResult =
   | { success: true; rooms: RoomData[] }
   | { success: false; error: string };
-
-/* -------------------------------------------------------------------------- */
-/*  getRooms                                                                   */
-/* -------------------------------------------------------------------------- */
 
 export async function getRooms(): Promise<GetRoomsResult> {
   try {
@@ -41,10 +41,6 @@ export async function getRooms(): Promise<GetRoomsResult> {
     return { success: false, error: "Failed to load rooms." };
   }
 }
-
-/* -------------------------------------------------------------------------- */
-/*  Cached fetch                                                               */
-/* -------------------------------------------------------------------------- */
 
 async function fetchRooms(): Promise<GetRoomsResult> {
   "use cache";
@@ -64,6 +60,7 @@ async function fetchRooms(): Promise<GetRoomsResult> {
       language: true,
       maxParticipants: true,
       createdAt: true,
+      liveKitRoomName: true, // We select it to use in the LiveKit fetch below
       host: {
         select: {
           id: true,
@@ -75,11 +72,47 @@ async function fetchRooms(): Promise<GetRoomsResult> {
     },
   });
 
+  const roomsWithParticipants = await Promise.all(
+    rooms.map(async (room) => {
+      let participants: RoomParticipant[] = [];
+      
+      try {
+        const livekitParticipants = await listLiveKitParticipants(room.liveKitRoomName);
+        
+        participants = livekitParticipants.map((p) => {
+          let avatarUrl = null;
+          try {
+            if (p.metadata) {
+              avatarUrl = JSON.parse(p.metadata).avatarUrl;
+            }
+          } catch {}
+          
+          return {
+            identity: p.identity,
+            name: p.name || "Guest",
+            avatarUrl,
+          };
+        });
+      } catch {
+        // If LiveKit is slow or room hasn't started, just return empty array
+      }
+
+      // ✅ FIXED: Explicitly pick the fields we want, avoiding the unused destructuring error.
+      return {
+        id: room.id,
+        title: room.title,
+        description: room.description,
+        language: room.language,
+        maxParticipants: room.maxParticipants,
+        createdAt: room.createdAt.toISOString(),
+        host: room.host,
+        participants,
+      };
+    })
+  );
+
   return {
     success: true,
-    rooms: rooms.map((r) => ({
-      ...r,
-      createdAt: r.createdAt.toISOString(),
-    })),
+    rooms: roomsWithParticipants,
   };
 }

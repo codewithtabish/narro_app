@@ -2,7 +2,7 @@
 "use server";
 
 import { auth } from "@clerk/nextjs/server";
-import { revalidatePath } from "next/cache"; // ✅ Added revalidatePath
+import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { z } from "zod";
 
@@ -39,8 +39,15 @@ export async function deleteRoom(
       return { success: false, error: "Only the host can delete this room." };
     }
 
-    // ✅ BACKGROUND TASK: Delete from DB, LiveKit, and clear cache.
-    // The user is instantly redirected by the UI. This runs silently.
+    /* ✅ 1. INSTANTLY clear the /rooms page cache. */
+    // This runs synchronously so the user sees the room disappear 
+    // the moment they are redirected back to the list.
+    revalidatePath("/rooms");
+    revalidateSingleRoom(roomId);
+    revalidateRooms();
+
+    /* ✅ 2. Background Task: Delete from LiveKit and DB. */
+    // The user doesn't wait for these expensive operations.
     after(async () => {
       try {
         await deleteLiveKitRoom(room.liveKitRoomName);
@@ -48,13 +55,8 @@ export async function deleteRoom(
         await prisma.room.delete({
           where: { id: roomId },
         });
-
-        // ✅ Clear all relevant caches instantly
-        revalidateSingleRoom(roomId);
-        revalidateRooms();
-        revalidatePath("/rooms"); // ✅ Force the /rooms page to refresh
       } catch (err) {
-        console.error("[deleteRoom] Background error:", err);
+        console.error("[deleteRoom] Background cleanup error:", err);
       }
     });
 

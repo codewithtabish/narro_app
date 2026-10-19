@@ -14,9 +14,12 @@ export function RoomCard({ room }: { room: RoomData }) {
   const flag = getLanguageFlag(room.language);
   const langName = getLanguageName(room.language);
 
+  // ✅ Show up to 3 avatars, then "+X" for the rest
+  const visibleParticipants = room.participants.slice(0, 3);
+  const extraCount = room.participants.length - 3;
+
   return (
     <Link
-      // ✅ Changed route to /rooms/active/[roomId]
       href={`/rooms/active/${room.id}`}
       className="group relative flex flex-col justify-between overflow-hidden rounded-3xl border border-border bg-card p-6 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-md"
     >
@@ -48,9 +51,42 @@ export function RoomCard({ room }: { room: RoomData }) {
       </div>
 
       <div className="mt-8 flex items-center justify-between border-t border-border/50 pt-4">
-        <div className="flex items-center gap-1.5 text-[13px] font-medium text-muted-foreground">
-          <Users size={16} /> Max {room.maxParticipants}
+        <div className="flex items-center gap-3">
+          
+          {/* ✅ Stacked Avatars */}
+          <div className="flex -space-x-2.5">
+            {visibleParticipants.length > 0 ? (
+              visibleParticipants.map((p, i) => (
+                <div 
+                  key={p.identity} 
+                  className="relative h-7 w-7 rounded-full border-2 border-card bg-muted overflow-hidden shrink-0 shadow-sm"
+                  style={{ zIndex: 10 - i }}
+                >
+                  {p.avatarUrl ? (
+                    <Image src={p.avatarUrl} alt={p.name} fill className="object-cover" />
+                  ) : (
+                    <span className="flex h-full w-full items-center justify-center text-[10px] font-semibold text-primary">
+                      {p.name[0]?.toUpperCase()}
+                    </span>
+                  )}
+                </div>
+              ))
+            ) : (
+              <div className="h-7 w-7 rounded-full border-2 border-card bg-muted/50" />
+            )}
+            
+            {extraCount > 0 && (
+              <div className="relative flex h-7 w-7 items-center justify-center rounded-full border-2 border-card bg-muted text-[10px] font-bold text-muted-foreground shrink-0 z-0">
+                +{extraCount}
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center gap-1.5 text-[13px] font-medium text-muted-foreground">
+            <Users size={16} /> Max {room.maxParticipants}
+          </div>
         </div>
+
         <span className="inline-flex h-9 items-center justify-center rounded-full border border-primary/20 bg-primary/5 px-5 text-[13px] font-semibold text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
           Join
         </span>

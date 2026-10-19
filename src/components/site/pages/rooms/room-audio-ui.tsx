@@ -74,7 +74,6 @@ export function RoomAudioUI({ token, serverUrl, roomId, roomTitle, isHost }: Roo
         audio={true}
         video={false}
         onDisconnected={handleDisconnected}
-        // ✅ FIX 1: Use 100dvh so mobile browsers don't cut off the bottom dock
         className="fixed inset-0 z-100 flex h-dvh w-screen flex-col overflow-hidden bg-[#1A1613] text-[#FAF9F6]"
       >
         {/* Background Ambient Glow */}
@@ -82,12 +81,12 @@ export function RoomAudioUI({ token, serverUrl, roomId, roomTitle, isHost }: Roo
           <div className="h-[800px] w-[800px] rounded-full bg-[#6B4A3A] opacity-20 blur-[120px]" />
         </div>
 
-        {/* Top Navbar */}
+        {/* ✅ FIXED TOP HEADER: Absolute positioning to overlay scrolling content */}
         <motion.header 
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, ease: "easeOut" }}
-          className="relative z-10 flex w-full shrink-0 items-center justify-between px-6 py-6 sm:px-10"
+          className="absolute top-0 left-0 right-0 z-20 flex w-full items-center justify-between px-6 py-6 sm:px-10 bg-linear-to-b from-[#1A1613] to-transparent"
         >
           <div className="font-serif text-[24px] sm:text-[28px] tracking-tight text-[#FAF9F6]">NARRO</div>
           <div className="absolute left-1/2 -translate-x-1/2 text-base sm:text-xl font-medium text-[#FAF9F6]">
@@ -99,7 +98,7 @@ export function RoomAudioUI({ token, serverUrl, roomId, roomTitle, isHost }: Roo
               <button
                 onClick={() => setDialogType("delete")}
                 disabled={isPending}
-                className="flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-red-400 transition-colors hover:bg-red-400/10 disabled:opacity-50"
+                className="flex items-center gap-2 rounded-full bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-400 backdrop-blur-md transition-colors hover:bg-red-400/20 disabled:opacity-50"
               >
                 <Trash2 className="h-4 w-4" />
                 <span className="hidden sm:inline">Delete Room</span>
@@ -108,19 +107,19 @@ export function RoomAudioUI({ token, serverUrl, roomId, roomTitle, isHost }: Roo
           </div>
         </motion.header>
 
-        {/* Main Audio Grid */}
-        {/* ✅ FIX 2: overflow-y-auto allows scrolling on mobile if there are too many people */}
-        <div className="relative z-10 flex-1 overflow-y-auto flex items-center justify-center p-6 custom-scrollbar">
-          <AudioGrid />
+        {/* ✅ SCROLLABLE CENTER AREA: Padding top/bottom to clear header and dock */}
+        <div className="relative z-10 flex-1 overflow-y-auto custom-scrollbar">
+          <div className="flex min-h-full items-center justify-center p-6 pt-32 pb-40">
+            <AudioGrid />
+          </div>
         </div>
 
-        {/* Floating Control Dock */}
-        {/* ✅ FIX 3: shrink-0 and pb-safe ensures it stays at the bottom on mobile */}
+        {/* ✅ FIXED BOTTOM DOCK: Absolute positioning, stays on top of scroll */}
         <motion.div 
           initial={{ opacity: 0, y: 40 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.2, ease: "easeOut" }}
-          className="relative z-10 flex shrink-0 flex-col items-center gap-4 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-4 sm:pb-12 sm:gap-6"
+          className="absolute bottom-0 left-0 right-0 z-20 flex flex-col items-center gap-4 bg-linear-to-t from-[#1A1613] via-[#1A1613]/80 to-transparent pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-12"
         >
           <ControlDock onLeave={() => setDialogType("leave")} />
           <p className="flex items-center gap-1.5 text-[13px] text-[#9B9691]">
@@ -131,7 +130,7 @@ export function RoomAudioUI({ token, serverUrl, roomId, roomTitle, isHost }: Roo
         <RoomAudioRenderer />
       </LiveKitRoom>
 
-      {/* Custom Delete Confirmation Dialog */}
+      {/* Custom Delete/Leave Dialog */}
       <AnimatePresence>
         {dialogType && (
           <div className="fixed inset-0 z-110 flex items-center justify-center p-4">
@@ -196,7 +195,7 @@ function AudioGrid() {
   const { localParticipant } = useLocalParticipant();
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-12 max-w-3xl w-full place-items-center py-6">
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-10 max-w-3xl w-full place-items-center">
       <AnimatePresence>
         {participants.map((p) => {
           const isSpeaking = p.isSpeaking;
@@ -216,14 +215,14 @@ function AudioGrid() {
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.8 }}
               transition={{ type: "spring", stiffness: 200, damping: 20 }}
-              className="flex flex-col items-center gap-5"
+              className="flex flex-col items-center gap-4"
             >
               <div className="relative">
                 {isSpeaking && (
                   <motion.div
                     initial={{ opacity: 0, scale: 0.8 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    className="absolute -inset-6 rounded-full border-2 border-[#6B4A3A]"
+                    className="absolute -inset-4 rounded-full border-2 border-[#6B4A3A]"
                     style={{ zIndex: -1 }}
                   >
                     <motion.div 
@@ -236,7 +235,8 @@ function AudioGrid() {
 
                 <div
                   className={cn(
-                    "relative flex h-32 w-32 sm:h-40 sm:w-40 items-center justify-center rounded-full border-[3px] transition-all duration-300 overflow-hidden shadow-xl",
+                    // ✅ RESPONSIVE SIZING: Smaller on mobile (h-28), bigger on desktop (sm:h-40)
+                    "relative flex h-28 w-28 sm:h-40 sm:w-40 items-center justify-center rounded-full border-[3px] transition-all duration-300 overflow-hidden shadow-xl",
                     isSpeaking 
                       ? "border-[#FAF9F6] shadow-[0_0_40px_rgba(107,74,58,0.8)]" 
                       : "border-[#FAF9F6]/20"
@@ -252,7 +252,7 @@ function AudioGrid() {
                 </div>
               </div>
               
-              <span className="text-[17px] font-medium text-[#FAF9F6] tracking-wide">
+              <span className="text-[15px] sm:text-[17px] font-medium text-[#FAF9F6] tracking-wide">
                 {isLocal ? "You" : p.name || "Guest"}
               </span>
             </motion.div>
@@ -288,18 +288,18 @@ function ControlDock({ onLeave }: { onLeave: () => void }) {
             : "bg-white/10 text-[#FAF9F6] hover:bg-white/20"
         )}
       >
-        {isMuted ? <MicOff size={22} /> : <Mic size={22} />}
+        {isMuted ? <MicOff size={20} className="sm:w-[22px] sm:h-[22px]" /> : <Mic size={20} className="sm:w-[22px] sm:h-[22px]" />}
       </button>
 
       <button 
         onClick={onLeave}
         className="flex h-14 w-14 sm:h-16 sm:w-16 items-center justify-center rounded-full bg-[#EF4444] text-white shadow-[0_0_20px_rgba(239,68,68,0.4)] transition-transform hover:scale-105 active:scale-95"
       >
-        <PhoneOff size={26} />
+        <PhoneOff size={24} className="sm:w-[26px] sm:h-[26px]" />
       </button>
 
       <button className="flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-full bg-white/10 text-[#FAF9F6] hover:bg-white/20 transition-all duration-200 active:scale-95">
-        <Volume2 size={22} />
+        <Volume2 size={20} className="sm:w-[22px] sm:h-[22px]" />
       </button>
     </div>
   );
