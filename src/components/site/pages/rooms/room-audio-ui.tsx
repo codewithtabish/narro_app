@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { handleSpeakerRequest } from "@/app/actions/rooms/approve-speaker";
 import { cancelSpeakerRequest } from "@/app/actions/rooms/cancel-speaker-request";
@@ -51,10 +51,13 @@ export function RoomAudioUI({
   const [dialogType, setDialogType] = useState<"leave" | "delete" | null>(null);
   const [hasRequested, setHasRequested] = useState(!!myPendingRequestId);
   const [selectedParticipant, setSelectedParticipant] = useState<{ identity: string; name: string } | null>(null);
+  
+  // ✅ 1. Use a ref to prevent false disconnects during Next.js refreshes
+  const intentionalLeaveRef = useRef(false);
 
   useSpeakerRequests(isHost);
 
-  // ✅ Lock page scroll
+  // Lock page scroll
   useEffect(() => {
     const originalStyle = window.getComputedStyle(document.body).overflow;
     document.body.style.overflow = "hidden";
@@ -63,40 +66,23 @@ export function RoomAudioUI({
     };
   }, []);
 
-  // ✅ THE FIX: Proper beforeunload handler for tab close
+  // Tab close prompt
   useEffect(() => {
-    // Named function so we can remove it correctly later
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      // This triggers the browser's native "Leave site?" prompt
       e.preventDefault();
-      // Legacy support for older browsers
       e.returnValue = "";
     };
-
-    // Attach the listener
     window.addEventListener("beforeunload", handleBeforeUnload);
-
-    // Cleanup: remove the exact same function reference
-    return () => {
-      window.removeEventListener("beforeunload", handleBeforeUnload);
-    };
-  }, []); // Empty dependency array - attach once, remove on unmount
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, []);
 
   const handleLeave = () => {
     setDialogType(null);
     setIsPending(true);
+    intentionalLeaveRef.current = true; // ✅ Mark as intentional
+    
     sessionStorage.setItem("room-toast", "You left the room.");
     leaveRoom({ roomId }).catch(console.error);
-    router.push("/rooms");
-    router.refresh();
-  };
-
-  // ✅ When LiveKit disconnects (tab actually closed or kicked)
-  const handleDisconnected = () => {
-    if (!isPending) {
-      sessionStorage.setItem("room-toast", "You left the room.");
-      leaveRoom({ roomId }).catch(console.error);
-    }
     router.push("/rooms");
     router.refresh();
   };
@@ -104,6 +90,8 @@ export function RoomAudioUI({
   const handleDeleteRoom = async () => {
     setDialogType(null);
     setIsPending(true);
+    intentionalLeaveRef.current = true; // ✅ Mark as intentional
+    
     const res = await deleteRoom({ roomId });
     if (res.success) {
       sessionStorage.setItem("room-toast", "You closed the room.");
@@ -111,8 +99,23 @@ export function RoomAudioUI({
       router.refresh();
     } else {
       setIsPending(false);
+      intentionalLeaveRef.current = false;
       alert(res.error);
     }
+  };
+
+  // ✅ 2. Only redirect on disconnect if the user intentionally left (or the host closed the room)
+  const handleDisconnected = () => {
+    if (intentionalLeaveRef.current) {
+      // User clicked Leave or Delete. Do nothing here, let the router handle it.
+      return;
+    }
+
+    // If it wasn't intentional, it means the host closed the room.
+    sessionStorage.setItem("room-toast", "The host closed the room.");
+    leaveRoom({ roomId }).catch(console.error);
+    router.push("/rooms");
+    router.refresh();
   };
 
   const handleRequestSpeaker = async () => {
@@ -166,7 +169,6 @@ export function RoomAudioUI({
 
         {/* Scrollable Center Area */}
         <div className="relative z-10 flex-1 overflow-y-auto custom-scrollbar">
-          
           {/* WAITING ROOM ROW */}
           {((isHost && pendingRequests.length > 0) || (!isHost && hasRequested)) && (
             <div className="flex flex-col items-center pt-24 pb-4 px-4">
