@@ -81,7 +81,7 @@ export function RoomAudioUI({ token, serverUrl, roomId, roomTitle, isHost }: Roo
           <div className="h-[800px] w-[800px] rounded-full bg-[#6B4A3A] opacity-20 blur-[120px]" />
         </div>
 
-        {/* ✅ FIXED TOP HEADER: Absolute positioning to overlay scrolling content */}
+        {/* Top Header */}
         <motion.header 
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -107,14 +107,14 @@ export function RoomAudioUI({ token, serverUrl, roomId, roomTitle, isHost }: Roo
           </div>
         </motion.header>
 
-        {/* ✅ SCROLLABLE CENTER AREA: Padding top/bottom to clear header and dock */}
+        {/* Scrollable Center Area */}
         <div className="relative z-10 flex-1 overflow-y-auto custom-scrollbar">
           <div className="flex min-h-full items-center justify-center p-6 pt-32 pb-40">
             <AudioGrid />
           </div>
         </div>
 
-        {/* ✅ FIXED BOTTOM DOCK: Absolute positioning, stays on top of scroll */}
+        {/* Fixed Bottom Dock */}
         <motion.div 
           initial={{ opacity: 0, y: 40 }}
           animate={{ opacity: 1, y: 0 }}
@@ -130,7 +130,7 @@ export function RoomAudioUI({ token, serverUrl, roomId, roomTitle, isHost }: Roo
         <RoomAudioRenderer />
       </LiveKitRoom>
 
-      {/* Custom Delete/Leave Dialog */}
+      {/* Dialog */}
       <AnimatePresence>
         {dialogType && (
           <div className="fixed inset-0 z-110 flex items-center justify-center p-4">
@@ -187,7 +187,7 @@ export function RoomAudioUI({ token, serverUrl, roomId, roomTitle, isHost }: Roo
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Audio Grid                                                                */
+/*  Audio Grid (Responsive + Animated)                                        */
 /* -------------------------------------------------------------------------- */
 
 function AudioGrid() {
@@ -218,6 +218,7 @@ function AudioGrid() {
               className="flex flex-col items-center gap-4"
             >
               <div className="relative">
+                {/* ✅ ANIMATED RINGS (Only for the active speaker) */}
                 {isSpeaking && (
                   <motion.div
                     initial={{ opacity: 0, scale: 0.8 }}
@@ -233,10 +234,10 @@ function AudioGrid() {
                   </motion.div>
                 )}
 
+                {/* ✅ SMALLER RESPONSIVE AVATAR */}
                 <div
                   className={cn(
-                    // ✅ RESPONSIVE SIZING: Smaller on mobile (h-28), bigger on desktop (sm:h-40)
-                    "relative flex h-28 w-28 sm:h-40 sm:w-40 items-center justify-center rounded-full border-[3px] transition-all duration-300 overflow-hidden shadow-xl",
+                    "relative flex h-24 w-24 sm:h-32 sm:w-32 md:h-36 md:w-36 items-center justify-center rounded-full border-[3px] transition-all duration-300 overflow-hidden shadow-xl",
                     isSpeaking 
                       ? "border-[#FAF9F6] shadow-[0_0_40px_rgba(107,74,58,0.8)]" 
                       : "border-[#FAF9F6]/20"
@@ -245,7 +246,7 @@ function AudioGrid() {
                   {avatarUrl ? (
                     <Image src={avatarUrl} alt={p.name || "User"} fill sizes="(max-width: 768px) 100vw, 160px" className="object-cover" />
                   ) : (
-                    <div className="flex h-full w-full items-center justify-center bg-[#2A2622] text-4xl font-serif text-[#FAF9F6]">
+                    <div className="flex h-full w-full items-center justify-center bg-[#2A2622] text-3xl font-serif text-[#FAF9F6]">
                       {p.name?.[0]?.toUpperCase() ?? "?"}
                     </div>
                   )}

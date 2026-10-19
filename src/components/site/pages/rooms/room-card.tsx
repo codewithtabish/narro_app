@@ -1,27 +1,58 @@
 // src/components/site/pages/rooms/room-card.tsx
 "use client";
 
+import { useClerk, useUser } from "@clerk/nextjs";
 import { Users } from "lucide-react";
 import Image from "next/image";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 
 import type { RoomData } from "@/app/actions/rooms/get-rooms";
 import { getLanguageFlag, getLanguageName } from "@/data/languages";
 
 export function RoomCard({ room }: { room: RoomData }) {
+  const router = useRouter();
+  const { isSignedIn, isLoaded } = useUser();
+  const { openSignIn } = useClerk();
+
   const hostAvatar = room.host.profileImageUrl ?? room.host.imageUrl;
   const hostInitial = room.host.name?.[0]?.toUpperCase() ?? "?";
   const flag = getLanguageFlag(room.language);
   const langName = getLanguageName(room.language);
 
-  // ✅ Show up to 3 avatars, then "+X" for the rest
   const visibleParticipants = room.participants.slice(0, 3);
   const extraCount = room.participants.length - 3;
 
+  // ✅ 1. Instantly route them into the room if they just logged in and wanted to join
+  useEffect(() => {
+    if (isLoaded && isSignedIn) {
+      const pendingRoom = sessionStorage.getItem("pending-room-id");
+      if (pendingRoom === room.id) {
+        sessionStorage.removeItem("pending-room-id");
+        router.push(`/rooms/active/${room.id}`);
+      }
+    }
+  }, [isLoaded, isSignedIn, room.id, router]);
+
+  const handleJoinClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (!isLoaded) return;
+
+    if (!isSignedIn) {
+      // ✅ 2. Save the room ID and open the Clerk modal
+      sessionStorage.setItem("pending-room-id", room.id);
+      openSignIn(); 
+      return;
+    }
+
+    // ✅ 3. If already signed in, go straight to the room
+    router.push(`/rooms/active/${room.id}`);
+  };
+
   return (
-    <Link
-      href={`/rooms/active/${room.id}`}
-      className="group relative flex flex-col justify-between overflow-hidden rounded-3xl border border-border bg-card p-6 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-md"
+    <div
+      onClick={handleJoinClick}
+      className="group relative flex cursor-pointer flex-col justify-between overflow-hidden rounded-3xl border border-border bg-card p-6 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-md"
     >
       <div className="flex items-center justify-between">
         <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-emerald-600">
@@ -52,8 +83,6 @@ export function RoomCard({ room }: { room: RoomData }) {
 
       <div className="mt-8 flex items-center justify-between border-t border-border/50 pt-4">
         <div className="flex items-center gap-3">
-          
-          {/* ✅ Stacked Avatars */}
           <div className="flex -space-x-2.5">
             {visibleParticipants.length > 0 ? (
               visibleParticipants.map((p, i) => (
@@ -91,6 +120,6 @@ export function RoomCard({ room }: { room: RoomData }) {
           Join
         </span>
       </div>
-    </Link>
+    </div>
   );
 }

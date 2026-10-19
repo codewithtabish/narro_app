@@ -6,6 +6,14 @@ import { NextResponse } from "next/server";
 import { ADMIN_EMAILS } from "@/lib/admin-emails";
 
 const ADMIN_PREFIXES = ["/dashboard", "/agent"];
+
+// ✅ Protected Routes (Requires Login)
+const PROTECTED_PREFIXES = [
+  "/app", 
+  "/rooms/active", 
+  "/community/active"
+];
+
 const PUBLIC_API_PREFIXES = [
   "/api/webhooks",
   "/api/trpc",
@@ -37,13 +45,11 @@ export default clerkMiddleware(async (auth, req) => {
 
   const { userId, sessionClaims } = await auth();
 
-  // ── ADMIN PROTECTION ONLY ──
-  // We only protect /dashboard and /agent. Everything else is public.
+  // ── ADMIN PROTECTION ──
   const isAdminRoute = matchesPrefix(pathname, ADMIN_PREFIXES);
 
   if (isAdminRoute) {
     if (!userId) {
-      // Redirect logged-out users to sign-in if they try to access admin
       const signInUrl = new URL("/sign-in", req.url);
       signInUrl.searchParams.set("redirect_url", req.url);
       return NextResponse.redirect(signInUrl);
@@ -53,7 +59,6 @@ export default clerkMiddleware(async (auth, req) => {
       sessionClaims?.metadata as { role?: string } | undefined
     )?.role;
 
-    // Fast path: role already in the session token.
     if (role === "ADMIN") {
       return NextResponse.next();
     }
@@ -74,32 +79,32 @@ export default clerkMiddleware(async (auth, req) => {
       const isAdmin = role === "ADMIN" || isAdminEmail(email);
 
       if (!isAdmin) {
-        // Non-admins trying to access admin routes get sent to the app
         return NextResponse.redirect(new URL("/app", req.url));
       }
     } catch (error) {
       console.error("[NARRO Proxy] Admin verification failed:", error);
-      // Fail closed: if we cannot verify, do not allow access.
       return NextResponse.redirect(new URL("/app", req.url));
     }
   }
 
+  // ── ✅ PROTECT ACTIVE ROOMS & COMMUNITY CALLS ──
+  const isProtectedRoute = matchesPrefix(pathname, PROTECTED_PREFIXES);
+
+  if (isProtectedRoute && !userId) {
+    const signInUrl = new URL("/sign-in", req.url);
+    // After login, redirect them straight back to the room/call
+    signInUrl.searchParams.set("redirect_url", req.url);
+    return NextResponse.redirect(signInUrl);
+  }
+
   // ── EVERYTHING ELSE IS PUBLIC ──
-  // We explicitly do NOT redirect logged-in users away from "/" or "/sign-in".
-  // We do NOT redirect logged-out users away from "/app" or "/community".
-  // The Client Components and Server Actions handle the authentication gates.
   return NextResponse.next();
 });
 
 export const config = {
   matcher: [
-    // Skip Next.js internals and static files.
     "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
-
-    // Always run for Clerk's auto-proxy path.
     "/__clerk/:path*",
-
-    // Always run for API routes.
     "/(api|trpc)(.*)",
   ],
 };
