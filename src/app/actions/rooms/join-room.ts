@@ -2,33 +2,16 @@
 "use server";
 
 import { auth } from "@clerk/nextjs/server";
-import { after } from "next/server";
 import { z } from "zod";
 
-import { revalidateSingleRoom } from "@/lib/cache-keys";
-import {
-  createLiveKitToken,
-  listLiveKitParticipants,
-  livekitRoomService // ✅ Import to kick ghost sessions
-} from "@/lib/clients/livekit-client";
+import { createLiveKitToken, listLiveKitParticipants, livekitRoomService } from "@/lib/clients/livekit-client";
 import prisma from "@/lib/clients/prisma-client";
 
 const inputSchema = z.object({
   roomId: z.string().min(1, "roomId is required"),
 });
 
-export type JoinRoomResult =
-  | {
-      success: true;
-      token: string;
-      liveKitUrl: string;
-      roomName: string;
-    }
-  | { success: false; error: string };
-
-export async function joinRoom(
-  input: z.infer<typeof inputSchema>,
-): Promise<JoinRoomResult> {
+export async function joinRoom(input: z.infer<typeof inputSchema>) {
   try {
     const { userId: clerkUserId } = await auth();
     if (!clerkUserId) return { success: false, error: "Not authenticated." };
@@ -37,7 +20,6 @@ export async function joinRoom(
     if (!parsed.success) return { success: false, error: "Invalid room ID." };
     const { roomId } = parsed.data;
 
-    /* ── 1. Parallel Fetch (User + Room) ── */
     const [me, room] = await Promise.all([
       prisma.user.findUnique({
         where: { clerkUserId },
@@ -56,52 +38,35 @@ export async function joinRoom(
     const liveKitUrl = process.env.LIVEKIT_URL;
     if (!liveKitUrl) return { success: false, error: "LiveKit not configured." };
 
-    /* ── 2. Ghost Session Cleanup ── */
-    // ✅ Instead of blocking, we kick the old session out.
+    // Ghost session cleanup
     try {
       const activeParticipants = await listLiveKitParticipants(room.liveKitRoomName);
       const isAlreadyConnected = activeParticipants.some((p) => p.identity === me.id);
-
       if (isAlreadyConnected) {
-        // Force disconnect the old session
         await livekitRoomService.removeParticipant(room.liveKitRoomName, me.id);
-        
-        // Wait 600ms for LiveKit to process the disconnect
         await new Promise((resolve) => setTimeout(resolve, 600));
       }
-    } catch {
-      // If the room isn't fully initialized in LiveKit yet, ignore and proceed.
-    }
+    } catch {}
 
-    /* ── 3. Get Role & Generate Token ── */
     const isHost = room.hostId === me.id;
     const speakerRequest = await prisma.roomSpeakerRequest.findUnique({
       where: { roomId_userId: { roomId, userId: me.id } },
     });
     const isSpeaker = isHost || speakerRequest?.status === "APPROVED";
     const role = isHost ? "host" : isSpeaker ? "speaker" : "listener";
-    
     const avatarUrl = me.profileImageUrl ?? me.imageUrl ?? null;
 
     const token = await createLiveKitToken({
       roomName: room.liveKitRoomName,
       participantId: me.id,
       participantName: me.name,
-      metadata: JSON.stringify({ avatarUrl, role }), // ✅ Passed role
+      metadata: JSON.stringify({ avatarUrl, role }),
       ttl: 60 * 60,
     });
 
-    /* ── 4. Background: Revalidate Cache ── */
-    after(() => {
-      revalidateSingleRoom(roomId);
-    });
+    // ❌ REMOVED: after(() => revalidateSingleRoom(roomId));
 
-    return {
-      success: true,
-      token,
-      liveKitUrl,
-      roomName: room.liveKitRoomName,
-    };
+    return { success: true, token, liveKitUrl, roomName: room.liveKitRoomName };
   } catch (err) {
     console.error("[joinRoom] Error:", err);
     return { success: false, error: "Failed to join room." };

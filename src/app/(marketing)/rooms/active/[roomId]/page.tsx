@@ -28,10 +28,11 @@ export default async function ActiveRoomPage(props: {
 
   const joinResult = await joinRoom({ roomId });
   
-  if (!joinResult.success) {
+  // ✅ FIX: Type guard to ensure token and URL exist
+  if (!joinResult.success || !joinResult.token || !joinResult.liveKitUrl) {
     return (
       <div className="flex h-screen items-center justify-center bg-background text-foreground">
-        <p>Failed to join: {joinResult.error}</p>
+        <p>Failed to join: {joinResult.error || "Missing token"}</p>
       </div>
     );
   }
@@ -62,14 +63,14 @@ export default async function ActiveRoomPage(props: {
 
   return (
     <RoomWrapper
-      token={joinResult.token}
-      serverUrl={joinResult.liveKitUrl}
+      token={joinResult.token} // ✅ Now TypeScript knows this is a string
+      serverUrl={joinResult.liveKitUrl} // ✅ Now TypeScript knows this is a string
       roomId={roomId}
       roomTitle={room.title}
       isHost={isHost}
-      initialRole={initialRole} // ✅ Pass role
-      pendingRequests={isHost ? pendingRequests : []} // ✅ Pass waiting room (only Host sees the whole list)
-      myPendingRequestId={myPendingRequestId} // ✅ Pass user's own request ID (to show their chair)
+      initialRole={initialRole}
+      pendingRequests={isHost ? pendingRequests : []}
+      myPendingRequestId={myPendingRequestId}
     />
   );
 }

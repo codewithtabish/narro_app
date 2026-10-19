@@ -29,7 +29,7 @@ import { leaveRoom } from "@/app/actions/rooms/leave-room";
 import { muteParticipant } from "@/app/actions/rooms/mute-participant";
 import { removeFromStage } from "@/app/actions/rooms/remove-from-stage";
 import { requestSpeaker } from "@/app/actions/rooms/request-speaker";
-import { useSpeakerRequests } from "@/hooks/use-speaker-requests";
+// ❌ REMOVED: import { useSpeakerRequests } from "@/hooks/use-speaker-requests";
 import { cn } from "@/lib/utils";
 
 interface RoomAudioUIProps {
@@ -52,10 +52,9 @@ export function RoomAudioUI({
   const [hasRequested, setHasRequested] = useState(!!myPendingRequestId);
   const [selectedParticipant, setSelectedParticipant] = useState<{ identity: string; name: string } | null>(null);
   
-  // ✅ 1. Use a ref to prevent false disconnects during Next.js background refreshes
   const intentionalLeaveRef = useRef(false);
 
-  useSpeakerRequests(isHost);
+  // ❌ REMOVED: useSpeakerRequests(isHost);
 
   // Lock page scroll
   useEffect(() => {
@@ -79,7 +78,7 @@ export function RoomAudioUI({
   const handleLeave = () => {
     setDialogType(null);
     setIsPending(true);
-    intentionalLeaveRef.current = true; // ✅ Mark as intentional
+    intentionalLeaveRef.current = true; 
     
     sessionStorage.setItem("room-toast", "You left the room.");
     leaveRoom({ roomId }).catch(console.error);
@@ -90,7 +89,7 @@ export function RoomAudioUI({
   const handleDeleteRoom = async () => {
     setDialogType(null);
     setIsPending(true);
-    intentionalLeaveRef.current = true; // ✅ Mark as intentional
+    intentionalLeaveRef.current = true; 
     
     const res = await deleteRoom({ roomId });
     if (res.success) {
@@ -104,14 +103,8 @@ export function RoomAudioUI({
     }
   };
 
-  // ✅ 2. Only redirect on disconnect if the user intentionally left
   const handleDisconnected = () => {
-    if (intentionalLeaveRef.current) {
-      return; // Do nothing. The router will handle the redirect.
-    }
-
-    // If it wasn't intentional, it was likely a background cache refresh.
-    // We do NOT redirect. The LiveKitRoom will silently reconnect.
+    if (intentionalLeaveRef.current) return;
     console.log("[RoomAudioUI] Disconnected unexpectedly. Reconnecting...");
   };
 
