@@ -16,7 +16,7 @@ export const CACHE_TAGS = {
   users: "users",
   user: (clerkId: string) => `user:${clerkId}`,
   
-  // ── Receiver profile (/app/calls/[id]) ──
+  // ── Receiver profile (/community/[id]) ──
   receiverUser: (clerkId: string) => `receiver-user:${clerkId}`,
 
   // ── Onboarding ──
@@ -27,7 +27,11 @@ export const CACHE_TAGS = {
   homepageRooms: "homepage-rooms",
 
   // ── PUBLIC DIRECTORY PAGES ──
-  communityDirectory: "community-directory", // NEW: For the /community page
+  communityDirectory: "community-directory", 
+
+  // ── ROOMS ──
+  rooms: "rooms",                             // Global list of rooms (/rooms)
+  room: (roomId: string) => `room:${roomId}`, // A specific room's data (/rooms/[roomId])
 } as const;
 
 // ============================================================
@@ -37,14 +41,38 @@ export const CACHE_TAGS = {
 const NOW = { expire: 0 } as const;
 
 // ─────────────────────────────────────────────
+// ROOMS
+// ─────────────────────────────────────────────
+
+/**
+ * Revalidate the global Rooms lists (Home page + /rooms page).
+ * Call after: A room is created, a room is closed, or a room's 
+ * details change (e.g., max participants).
+ */
+export function revalidateRooms() {
+  revalidateTag(CACHE_TAGS.rooms, NOW);
+  revalidateTag(CACHE_TAGS.homepageRooms, NOW);
+  revalidatePath("/");
+  revalidatePath("/rooms"); // ✅ Fixed: /rooms instead of /community
+}
+
+/**
+ * Revalidate a SINGLE room's cached data (used for the room page).
+ * Call after: A user joins or leaves the room (to update the participant count).
+ */
+export function revalidateSingleRoom(roomId: string) {
+  revalidateTag(CACHE_TAGS.room(roomId), NOW);
+  revalidateTag(CACHE_TAGS.rooms, NOW); 
+  revalidatePath(`/rooms/${roomId}`); // ✅ Fixed: /rooms/[roomId]
+  revalidatePath("/rooms");           // ✅ Fixed: /rooms
+}
+
+// ─────────────────────────────────────────────
 // PUBLIC DIRECTORY
 // ─────────────────────────────────────────────
 
 /**
  * Revalidate the full public community directory (/community).
- * 
- * Call after: A new user completes onboarding, or a user's public 
- * profile data changes (name, bio, languages, availability).
  */
 export function revalidateCommunityDirectory() {
   revalidateTag(CACHE_TAGS.communityDirectory, NOW);
@@ -61,7 +89,6 @@ export function revalidateCommunityDirectory() {
 export function revalidateHomepagePreviews() {
   revalidateTag(CACHE_TAGS.homepageCommunity, NOW);
   revalidateTag(CACHE_TAGS.homepageRooms, NOW);
-  // Revalidate the root landing page path
   revalidatePath("/");
 }
 

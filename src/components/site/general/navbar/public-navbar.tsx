@@ -31,9 +31,11 @@ export function PublicNavbar() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
-  /* ── Check if we are in an active call room ────────────── */
-  // If the URL is /community/active/..., we completely hide the navbar
-  const isCallRoom = pathname?.startsWith("/community/active/");
+  /* ── Check if we are in an active call or room ────────────── */
+  // If the URL is /community/active/... OR /rooms/active/..., we hide the navbar
+  const isImmersivePage = 
+    pathname?.startsWith("/community/active/") || 
+    pathname?.startsWith("/rooms/active/");
 
   /* ── Subtle shadow on scroll ───────────────────────────── */
   useEffect(() => {
@@ -65,8 +67,8 @@ export function PublicNavbar() {
     }
   }, [isMenuOpen]);
 
-  /* ── HIDE THE NAVBAR IN THE CALL ROOM ──────────────────── */
-  if (isCallRoom) return null;
+  /* ── HIDE THE NAVBAR IN IMMERSIVE PAGES ──────────────────── */
+  if (isImmersivePage) return null;
 
   return (
     <header

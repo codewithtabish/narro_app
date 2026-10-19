@@ -7,7 +7,10 @@ import { EnablePushBanner } from "@/components/site/loged/general/push/enable-pu
 import { OnboardingGate } from "@/components/site/loged/onboarding/onboarding-gate";
 import { OnboardingGateFallback } from "@/components/site/loged/onboarding/onboarding-gate-fallback";
 import { CallListenerMount } from "@/components/site/pages/community/calling/call-listener-mount";
+
+// ✅ 1. Import the sound listener
 import React, { Suspense } from "react";
+import { RoomSoundListener } from "../actions/rooms/room-sound-listener";
 
 type CommunityLayoutProps = {
   children: React.ReactNode;
@@ -16,6 +19,9 @@ type CommunityLayoutProps = {
 const CommunityLayout = ({ children }: CommunityLayoutProps) => {
   return (
     <div>
+      {/* ✅ 2. Mount it globally here */}
+      <RoomSoundListener />
+
       <Container>
         {/* Navbar Suspense for usePathname */}
         <Suspense fallback={<div className="h-[72px] w-full border-b border-border bg-background/85" />}>
@@ -23,7 +29,6 @@ const CommunityLayout = ({ children }: CommunityLayoutProps) => {
         </Suspense>
 
         {/* ✅ ADDED: Push Notification Banner */}
-        {/* This allows users on the public site to subscribe to calls */}
         <ClientOnly>
           <div className="mx-auto my-4 w-full max-w-3xl px-4 sm:px-6 lg:px-8">
             <EnablePushBanner />
@@ -35,20 +40,12 @@ const CommunityLayout = ({ children }: CommunityLayoutProps) => {
         <Footer />
       </Container>
 
-      {/* 
-        GLOBAL ONBOARDING GATE 
-        This sits outside the Container so it can overlay the whole screen.
-        It checks if the user is logged in and hasn't finished onboarding.
-      */}
+      {/* GLOBAL ONBOARDING GATE */}
       <Suspense fallback={<OnboardingGateFallback />}>
         <OnboardingGate />
       </Suspense>
 
-      {/* 
-        GLOBAL INCOMING CALL LISTENER
-        This listens for Service Worker messages (when someone calls)
-        and shows the full-screen Accept/Decline modal.
-      */}
+      {/* GLOBAL INCOMING CALL LISTENER */}
       <Suspense fallback={null}>
         <CallListenerMount />
       </Suspense>
