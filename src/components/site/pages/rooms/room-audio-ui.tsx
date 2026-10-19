@@ -63,6 +63,25 @@ export function RoomAudioUI({
     };
   }, []);
 
+  // ✅ THE FIX: Proper beforeunload handler for tab close
+  useEffect(() => {
+    // Named function so we can remove it correctly later
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      // This triggers the browser's native "Leave site?" prompt
+      e.preventDefault();
+      // Legacy support for older browsers
+      e.returnValue = "";
+    };
+
+    // Attach the listener
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    // Cleanup: remove the exact same function reference
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, []); // Empty dependency array - attach once, remove on unmount
+
   const handleLeave = () => {
     setDialogType(null);
     setIsPending(true);
@@ -72,7 +91,7 @@ export function RoomAudioUI({
     router.refresh();
   };
 
-  // ✅ 1. The ONLY cleanup that matters. When the tab closes or LiveKit disconnects.
+  // ✅ When LiveKit disconnects (tab actually closed or kicked)
   const handleDisconnected = () => {
     if (!isPending) {
       sessionStorage.setItem("room-toast", "You left the room.");
@@ -116,7 +135,7 @@ export function RoomAudioUI({
         connect={true}
         audio={initialRole !== "listener"}
         video={false}
-        onDisconnected={handleDisconnected} // ✅ Catches the tab close cleanly
+        onDisconnected={handleDisconnected}
         className="fixed inset-0 z-9999 flex h-dvh w-screen flex-col overflow-hidden bg-background text-foreground"
       >
         {/* Top Header */}
@@ -148,7 +167,7 @@ export function RoomAudioUI({
         {/* Scrollable Center Area */}
         <div className="relative z-10 flex-1 overflow-y-auto custom-scrollbar">
           
-          {/* ✅ WAITING ROOM ROW */}
+          {/* WAITING ROOM ROW */}
           {((isHost && pendingRequests.length > 0) || (!isHost && hasRequested)) && (
             <div className="flex flex-col items-center pt-24 pb-4 px-4">
               <span className="text-sm font-semibold text-muted-foreground mb-4 uppercase tracking-wider">
