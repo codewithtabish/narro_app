@@ -8,7 +8,8 @@ import { OnboardingGate } from "@/components/site/loged/onboarding/onboarding-ga
 import { OnboardingGateFallback } from "@/components/site/loged/onboarding/onboarding-gate-fallback";
 import { CallListenerMount } from "@/components/site/pages/community/calling/call-listener-mount";
 
-// ✅ 1. Import the sound listener
+// ✅ FIXED IMPORT PATHS
+import { RoomToast } from "@/components/site/pages/rooms/room-toast";
 import React, { Suspense } from "react";
 import { RoomSoundListener } from "../actions/rooms/room-sound-listener";
 
@@ -19,8 +20,11 @@ type CommunityLayoutProps = {
 const CommunityLayout = ({ children }: CommunityLayoutProps) => {
   return (
     <div>
-      {/* ✅ 2. Mount it globally here */}
+      {/* ✅ 1. Listen for Room Sounds */}
       <RoomSoundListener />
+      
+      {/* ✅ 2. Show the Toast globally (will trigger if sessionStorage has a message) */}
+      <RoomToast />
 
       <Container>
         {/* Navbar Suspense for usePathname */}

@@ -2,6 +2,7 @@
 "use server";
 
 import { auth } from "@clerk/nextjs/server";
+import { revalidatePath } from "next/cache"; // ✅ Added revalidatePath
 import { after } from "next/server";
 import { z } from "zod";
 
@@ -39,6 +40,7 @@ export async function deleteRoom(
     }
 
     // ✅ BACKGROUND TASK: Delete from DB, LiveKit, and clear cache.
+    // The user is instantly redirected by the UI. This runs silently.
     after(async () => {
       try {
         await deleteLiveKitRoom(room.liveKitRoomName);
@@ -47,8 +49,10 @@ export async function deleteRoom(
           where: { id: roomId },
         });
 
+        // ✅ Clear all relevant caches instantly
         revalidateSingleRoom(roomId);
         revalidateRooms();
+        revalidatePath("/rooms"); // ✅ Force the /rooms page to refresh
       } catch (err) {
         console.error("[deleteRoom] Background error:", err);
       }

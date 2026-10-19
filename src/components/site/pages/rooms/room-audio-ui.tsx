@@ -2,10 +2,10 @@
 "use client";
 
 import {
-    LiveKitRoom,
-    RoomAudioRenderer,
-    useLocalParticipant,
-    useParticipants,
+  LiveKitRoom,
+  RoomAudioRenderer,
+  useLocalParticipant,
+  useParticipants,
 } from "@livekit/components-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Loader2, Lock, Mic, MicOff, PhoneOff, Trash2, Volume2 } from "lucide-react";
@@ -74,7 +74,8 @@ export function RoomAudioUI({ token, serverUrl, roomId, roomTitle, isHost }: Roo
         audio={true}
         video={false}
         onDisconnected={handleDisconnected}
-        className="fixed inset-0 z-100 flex h-screen w-screen flex-col overflow-hidden bg-[#1A1613] text-[#FAF9F6]"
+        // ✅ FIX 1: Use 100dvh so mobile browsers don't cut off the bottom dock
+        className="fixed inset-0 z-100 flex h-dvh w-screen flex-col overflow-hidden bg-[#1A1613] text-[#FAF9F6]"
       >
         {/* Background Ambient Glow */}
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
@@ -86,14 +87,13 @@ export function RoomAudioUI({ token, serverUrl, roomId, roomTitle, isHost }: Roo
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, ease: "easeOut" }}
-          className="relative z-10 flex w-full items-center justify-between px-6 py-6 sm:px-10"
+          className="relative z-10 flex w-full shrink-0 items-center justify-between px-6 py-6 sm:px-10"
         >
           <div className="font-serif text-[24px] sm:text-[28px] tracking-tight text-[#FAF9F6]">NARRO</div>
           <div className="absolute left-1/2 -translate-x-1/2 text-base sm:text-xl font-medium text-[#FAF9F6]">
             {roomTitle}
           </div>
           
-          {/* ✅ ONLY SHOW DELETE ROOM FOR HOST */}
           <div className="flex items-center gap-2 sm:gap-4">
             {isHost && (
               <button
@@ -102,23 +102,25 @@ export function RoomAudioUI({ token, serverUrl, roomId, roomTitle, isHost }: Roo
                 className="flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-red-400 transition-colors hover:bg-red-400/10 disabled:opacity-50"
               >
                 <Trash2 className="h-4 w-4" />
-                Delete Room
+                <span className="hidden sm:inline">Delete Room</span>
               </button>
             )}
           </div>
         </motion.header>
 
         {/* Main Audio Grid */}
-        <div className="relative z-10 flex-1 flex items-center justify-center p-6">
+        {/* ✅ FIX 2: overflow-y-auto allows scrolling on mobile if there are too many people */}
+        <div className="relative z-10 flex-1 overflow-y-auto flex items-center justify-center p-6 custom-scrollbar">
           <AudioGrid />
         </div>
 
         {/* Floating Control Dock */}
+        {/* ✅ FIX 3: shrink-0 and pb-safe ensures it stays at the bottom on mobile */}
         <motion.div 
           initial={{ opacity: 0, y: 40 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.2, ease: "easeOut" }}
-          className="relative z-10 pb-12 flex flex-col items-center gap-6"
+          className="relative z-10 flex shrink-0 flex-col items-center gap-4 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-4 sm:pb-12 sm:gap-6"
         >
           <ControlDock onLeave={() => setDialogType("leave")} />
           <p className="flex items-center gap-1.5 text-[13px] text-[#9B9691]">
@@ -129,7 +131,7 @@ export function RoomAudioUI({ token, serverUrl, roomId, roomTitle, isHost }: Roo
         <RoomAudioRenderer />
       </LiveKitRoom>
 
-      {/* ✅ Beautiful Animated Confirmation Dialog */}
+      {/* Custom Delete Confirmation Dialog */}
       <AnimatePresence>
         {dialogType && (
           <div className="fixed inset-0 z-110 flex items-center justify-center p-4">
@@ -194,7 +196,7 @@ function AudioGrid() {
   const { localParticipant } = useLocalParticipant();
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-12 max-w-3xl w-full place-items-center">
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-12 max-w-3xl w-full place-items-center py-6">
       <AnimatePresence>
         {participants.map((p) => {
           const isSpeaking = p.isSpeaking;
@@ -276,7 +278,7 @@ function ControlDock({ onLeave }: { onLeave: () => void }) {
   };
 
   return (
-    <div className="flex items-center gap-5 sm:gap-6 rounded-full bg-white/5 px-6 sm:px-8 py-3 sm:py-4 backdrop-blur-xl border border-white/10 shadow-2xl">
+    <div className="flex items-center gap-4 sm:gap-6 rounded-full bg-white/5 px-4 sm:px-8 py-3 sm:py-4 backdrop-blur-xl border border-white/10 shadow-2xl">
       <button
         onClick={toggleMic}
         className={cn(
