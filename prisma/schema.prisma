@@ -24,24 +24,13 @@ model User {
   createdAt                  DateTime              @default(now())
   updatedAt                  DateTime              @updatedAt
   interests                  String[]              @default([])
-  /// *
-  ///    * Languages the user is learning. ISO 639-1 codes.
-  ///    * Example: ["es", "fr"]
   languagesLearning          String[]              @default([])
-  /// /**
-  ///    * Languages the user speaks. ISO 639-1 codes.
-  ///    * Example: ["ur", "en"]
   languagesSpoken            String[]              @default([])
   nextRenewalAt              DateTime?
   onboardingCompletedAt      DateTime?
   paymentProvider            PaymentProvider       @default(NONE)
   planExpiresAt              DateTime?
   planStartedAt              DateTime?
-  /// *
-  ///    * Per-language proficiency map.
-  ///    * Keys = ISO codes from languagesLearning.
-  ///    * Values = ProficiencyLevel strings.
-  ///    * Example: { "es": "BEGINNER", "fr": "INTERMEDIATE" }
   proficiencyByLanguage      Json?
   profileImageUrl            String?
   isAvailable                Boolean               @default(true)
@@ -55,13 +44,15 @@ model User {
   progressReports            ProgressReport[]
   pushDevices                PushDevice[]
   pushSubscriptions          PushSubscription[]
-  hostedRooms                Room[]
+  hostedRooms                Room[]                @relation("HostedRooms")
   safepayPayments            SafepayPayment[]
   safepaySubscriptions       SafepaySubscription[]
   subscriptions              Subscription[]
   usageRecords               UsageRecord[]
   blocksCreated              UserBlock[]           @relation("BlocksCreated")
   blocksReceived             UserBlock[]           @relation("BlocksReceived")
+  // ✅ NEW RELATION
+  speakerRequests            RoomSpeakerRequest[]
 
   @@index([status])
   @@index([lastSeenAt])
@@ -195,7 +186,9 @@ model Room {
   updatedAt       DateTime       @updatedAt
   closedAt        DateTime?
   notifications   Notification[]
-  host            User           @relation(fields: [hostId], references: [id], onDelete: Cascade)
+  host            User           @relation("HostedRooms", fields: [hostId], references: [id], onDelete: Cascade)
+  // ✅ NEW RELATION
+  speakerRequests RoomSpeakerRequest[]
 
   @@index([hostId])
   @@index([status, visibility])
@@ -370,6 +363,23 @@ model Call {
   @@index([callerId, createdAt])
   @@index([receiverId, createdAt])
   @@index([status, createdAt])
+}
+
+// ✅ NEW MODEL ADDED HERE
+model RoomSpeakerRequest {
+  id        String   @id @default(cuid())
+  roomId    String
+  userId    String
+  status    String   @default("PENDING") // PENDING, APPROVED, DECLINED
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  room      Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, userId])
+  @@index([roomId, status])
+  @@index([userId])
 }
 
 enum PlanTier {

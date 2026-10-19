@@ -1,5 +1,6 @@
 // src/app/(marketing)/rooms/active/[roomId]/page.tsx
 import { getRoomById } from "@/app/actions/rooms/get-room-by-id";
+import { getSpeakerRequests } from "@/app/actions/rooms/get-speaker-requests";
 import { joinRoom } from "@/app/actions/rooms/join-room";
 import { RoomWrapper } from "@/components/site/pages/rooms/room-wrapper";
 import prisma from "@/lib/clients/prisma-client";
@@ -35,12 +36,24 @@ export default async function ActiveRoomPage(props: {
     );
   }
 
+  // ✅ 1. Fetch user to determine host/role
   const me = await prisma.user.findUnique({
     where: { clerkUserId: userId },
     select: { id: true },
   });
   
   const isHost = room.hostId === me?.id;
+
+  const speakerRequest = await prisma.roomSpeakerRequest.findUnique({
+    where: { roomId_userId: { roomId, userId: me?.id ?? "" } },
+  });
+
+  const isSpeaker = speakerRequest?.status === "APPROVED";
+  const initialRole = isHost ? "host" : isSpeaker ? "speaker" : "listener";
+
+  // ✅ 2. Fetch the Waiting Room queue
+  const pendingRequests = await getSpeakerRequests(roomId);
+  const myPendingRequestId = pendingRequests.find(r => r.userId === me?.id)?.id || null;
 
   return (
     <RoomWrapper
@@ -49,6 +62,9 @@ export default async function ActiveRoomPage(props: {
       roomId={roomId}
       roomTitle={room.title}
       isHost={isHost}
+      initialRole={initialRole} // ✅ Pass role
+      pendingRequests={isHost ? pendingRequests : []} // ✅ Pass waiting room (only Host sees the whole list)
+      myPendingRequestId={myPendingRequestId} // ✅ Pass user's own request ID (to show their chair)
     />
   );
 }

@@ -8,13 +8,28 @@ import {
   useParticipants,
 } from "@livekit/components-react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Loader2, Lock, Mic, MicOff, PhoneOff, Trash2, Volume2 } from "lucide-react";
+import {
+  Check,
+  Crown,
+  Hand,
+  Headphones,
+  Loader2, Lock, Mic, MicOff,
+  MicOffIcon,
+  PhoneOff, Trash2, Volume2,
+  X
+} from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { handleSpeakerRequest } from "@/app/actions/rooms/approve-speaker";
+import { cancelSpeakerRequest } from "@/app/actions/rooms/cancel-speaker-request";
 import { deleteRoom } from "@/app/actions/rooms/delete-room";
 import { leaveRoom } from "@/app/actions/rooms/leave-room";
+import { muteParticipant } from "@/app/actions/rooms/mute-participant";
+import { removeFromStage } from "@/app/actions/rooms/remove-from-stage";
+import { requestSpeaker } from "@/app/actions/rooms/request-speaker";
+import { useSpeakerRequests } from "@/hooks/use-speaker-requests";
 import { cn } from "@/lib/utils";
 
 interface RoomAudioUIProps {
@@ -23,12 +38,24 @@ interface RoomAudioUIProps {
   roomId: string;
   roomTitle: string;
   isHost: boolean;
+  initialRole: "host" | "speaker" | "listener";
+  pendingRequests: { id: string; userId: string; name: string; avatarUrl: string | null }[];
+  myPendingRequestId: string | null;
 }
 
-export function RoomAudioUI({ token, serverUrl, roomId, roomTitle, isHost }: RoomAudioUIProps) {
+export function RoomAudioUI({ 
+  token, serverUrl, roomId, roomTitle, isHost, initialRole, pendingRequests, myPendingRequestId 
+}: RoomAudioUIProps) {
   const router = useRouter(); 
   const [isPending, setIsPending] = useState(false);
   const [dialogType, setDialogType] = useState<"leave" | "delete" | null>(null);
+  const [hasRequested, setHasRequested] = useState(!!myPendingRequestId);
+  
+  // ✅ FIXED: Properly typed instead of 'any'
+  const [selectedParticipant, setSelectedParticipant] = useState<{ identity: string; name: string } | null>(null);
+
+  // ✅ Poll for new requests if Host
+  useSpeakerRequests(isHost);
 
   const handleLeave = () => {
     setDialogType(null);
@@ -53,6 +80,18 @@ export function RoomAudioUI({ token, serverUrl, roomId, roomTitle, isHost }: Roo
     }
   };
 
+  const handleRequestSpeaker = async () => {
+    setHasRequested(true);
+    await requestSpeaker(roomId);
+    router.refresh();
+  };
+
+  const handleCancelRequest = async () => {
+    setHasRequested(false);
+    await cancelSpeakerRequest(roomId);
+    router.refresh();
+  };
+
   const handleDisconnected = () => {
     if (!isPending) {
       sessionStorage.setItem("room-toast", "The host closed the room.");
@@ -67,10 +106,10 @@ export function RoomAudioUI({ token, serverUrl, roomId, roomTitle, isHost }: Roo
         token={token}
         serverUrl={serverUrl}
         connect={true}
-        audio={true}
+        audio={initialRole !== "listener"}
         video={false}
         onDisconnected={handleDisconnected}
-        className="flex h-full w-full flex-col overflow-hidden bg-background text-foreground"
+        className="relative flex h-full w-full flex-col overflow-hidden text-foreground"
       >
         {/* Top Header */}
         <motion.header 
@@ -100,19 +139,95 @@ export function RoomAudioUI({ token, serverUrl, roomId, roomTitle, isHost }: Roo
 
         {/* Scrollable Center Area */}
         <div className="relative z-10 flex-1 overflow-y-auto custom-scrollbar">
-          <div className="flex min-h-full items-center justify-center p-4 pt-32 pb-48">
-            <AudioGrid />
+          
+          {/* ✅ WAITING ROOM ROW */}
+          {((isHost && pendingRequests.length > 0) || (!isHost && hasRequested)) && (
+            <div className="flex flex-col items-center pt-24 pb-4 px-4">
+              <span className="text-sm font-semibold text-muted-foreground mb-4 uppercase tracking-wider">
+                {isHost ? "Speaker Requests" : "Waiting Room"}
+              </span>
+              
+              <div className="flex gap-4 overflow-x-auto w-full max-w-4xl justify-start sm:justify-center pb-4 px-2">
+                {isHost && pendingRequests.map((req) => (
+                  <motion.div 
+                    key={req.id}
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="flex flex-col items-center gap-2 bg-muted/50 p-3 rounded-2xl border border-border min-w-[100px]"
+                  >
+                    <div className="relative h-12 w-12 rounded-full overflow-hidden bg-[#6B4A3A] text-white flex items-center justify-center text-lg font-serif">
+                      {req.avatarUrl ? (
+                        <Image src={req.avatarUrl} alt={req.name} fill className="object-cover" />
+                      ) : (
+                        req.name[0]?.toUpperCase()
+                      )}
+                    </div>
+                    <span className="text-xs font-medium text-foreground truncate w-20 text-center">{req.name}</span>
+                    <div className="flex gap-2 w-full">
+                      <button
+                        onClick={async () => await handleSpeakerRequest(req.id, "DECLINED", roomId)}
+                        className="flex-1 flex items-center justify-center py-1.5 bg-red-500/10 text-red-500 rounded-full hover:bg-red-500/20"
+                      >
+                        <X size={14} />
+                      </button>
+                      <button
+                        onClick={async () => await handleSpeakerRequest(req.id, "APPROVED", roomId)}
+                        className="flex-1 flex items-center justify-center py-1.5 bg-emerald-500/10 text-emerald-500 rounded-full hover:bg-emerald-500/20"
+                      >
+                        <Check size={14} />
+                      </button>
+                    </div>
+                  </motion.div>
+                ))}
+
+                {!isHost && hasRequested && (
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="flex flex-col items-center gap-2 bg-[#6B4A3A]/10 p-3 rounded-2xl border border-[#6B4A3A]/30 min-w-[100px]"
+                  >
+                    <div className="relative h-12 w-12 rounded-full overflow-hidden bg-[#6B4A3A] text-white flex items-center justify-center text-lg font-serif animate-pulse">
+                      You
+                    </div>
+                    <span className="text-xs font-medium text-[#6B4A3A] truncate w-20 text-center">Requesting...</span>
+                    <button
+                      onClick={handleCancelRequest}
+                      className="w-full flex items-center justify-center py-1.5 bg-red-500/10 text-red-500 text-xs font-semibold rounded-full hover:bg-red-500/20"
+                    >
+                      Cancel
+                    </button>
+                  </motion.div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Main Grid */}
+          <div className={cn("flex min-h-full items-center justify-center p-4 pb-56", (isHost && pendingRequests.length > 0) || hasRequested ? "pt-4" : "pt-32")}>
+            <AudioGrid 
+              isHost={isHost} 
+              onSelectParticipant={(p) => setSelectedParticipant(p)} 
+            />
           </div>
         </div>
 
-        {/* Fixed Bottom Dock */}
+        {/* Bottom Dock */}
         <motion.div 
           initial={{ opacity: 0, y: 40 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.2, ease: "easeOut" }}
           className="absolute bottom-0 left-0 right-0 z-20 flex flex-col items-center gap-4 bg-linear-to-t from-background via-background/90 to-transparent pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-12"
         >
-          <ControlDock onLeave={() => setDialogType("leave")} />
+          {initialRole === "listener" && !hasRequested && (
+            <button
+              onClick={handleRequestSpeaker}
+              className="mb-2 flex items-center gap-2 rounded-full border border-[#6B4A3A] bg-background px-6 py-3 text-sm font-semibold text-[#6B4A3A] shadow-lg transition-all hover:bg-[#6B4A3A]/5"
+            >
+              <Hand className="h-4 w-4" /> Raise Hand
+            </button>
+          )}
+
+          <ControlDock onLeave={() => setDialogType("leave")} isListener={initialRole === "listener"} />
           <p className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
             <Lock size={12} /> Your voice is encrypted end-to-end.
           </p>
@@ -121,7 +236,58 @@ export function RoomAudioUI({ token, serverUrl, roomId, roomTitle, isHost }: Roo
         <RoomAudioRenderer />
       </LiveKitRoom>
 
-      {/* Dialog */}
+      {/* Host Moderation Dialog */}
+      <AnimatePresence>
+        {selectedParticipant && (
+          <div className="fixed inset-0 z-120 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+              onClick={() => setSelectedParticipant(null)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="relative w-full max-w-sm rounded-[24px] bg-card p-6 shadow-2xl border border-border text-center"
+            >
+              <h3 className="text-xl font-serif text-card-foreground">
+                Manage {selectedParticipant.name}
+              </h3>
+              <div className="mt-6 flex flex-col gap-3">
+                <button
+                  onClick={async () => {
+                    await muteParticipant({ roomId, participantIdentity: selectedParticipant.identity });
+                    setSelectedParticipant(null);
+                  }}
+                  className="flex items-center justify-center gap-2 rounded-full bg-amber-500/10 px-6 py-3 text-sm font-semibold text-amber-600 hover:bg-amber-500/20 transition-colors"
+                >
+                  <MicOffIcon size={18} /> Force Mute
+                </button>
+                <button
+                  onClick={async () => {
+                    await removeFromStage({ roomId, participantIdentity: selectedParticipant.identity });
+                    setSelectedParticipant(null);
+                  }}
+                  className="flex items-center justify-center gap-2 rounded-full bg-orange-500/10 px-6 py-3 text-sm font-semibold text-orange-600 hover:bg-orange-500/20 transition-colors"
+                >
+                  <Headphones size={18} /> Move to Audience
+                </button>
+                <button
+                  onClick={() => setSelectedParticipant(null)}
+                  className="mt-2 text-sm font-semibold text-muted-foreground hover:text-foreground"
+                >
+                  Cancel
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Leave / Delete Dialog */}
       <AnimatePresence>
         {dialogType && (
           <div className="fixed inset-0 z-110 flex items-center justify-center p-4">
@@ -132,7 +298,6 @@ export function RoomAudioUI({ token, serverUrl, roomId, roomTitle, isHost }: Roo
               className="absolute inset-0 bg-black/60 backdrop-blur-sm"
               onClick={() => !isPending && setDialogType(null)}
             />
-            
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 10 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -147,7 +312,6 @@ export function RoomAudioUI({ token, serverUrl, roomId, roomTitle, isHost }: Roo
                   ? "You can always join back later. The conversation will continue without you." 
                   : "This will permanently delete the room and disconnect all participants. This action cannot be undone."}
               </p>
-              
               <div className="mt-8 flex items-center justify-end gap-3">
                 <button
                   onClick={() => setDialogType(null)}
@@ -177,26 +341,32 @@ export function RoomAudioUI({ token, serverUrl, roomId, roomTitle, isHost }: Roo
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Audio Grid                                                                */
+/*  Audio Grid (With Roles & Badges)                                          */
 /* -------------------------------------------------------------------------- */
 
-function AudioGrid() {
+function AudioGrid({ isHost, onSelectParticipant }: { isHost: boolean; onSelectParticipant: (p: { identity: string; name: string }) => void }) {
   const participants = useParticipants();
   const { localParticipant } = useLocalParticipant();
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 gap-x-8 gap-y-12 sm:gap-x-12 sm:gap-y-16 max-w-4xl w-full place-items-center">
+    <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-10 sm:gap-x-12 sm:gap-y-16 max-w-4xl w-full place-items-center">
       <AnimatePresence>
         {participants.map((p) => {
           const isSpeaking = p.isSpeaking;
           const isLocal = p.identity === localParticipant?.identity;
           
           let avatarUrl = null;
+          let role = "listener";
           try {
             if (p.metadata) {
-              avatarUrl = JSON.parse(p.metadata).avatarUrl;
+              const meta = JSON.parse(p.metadata);
+              avatarUrl = meta.avatarUrl;
+              role = meta.role || "listener";
             }
           } catch {}
+
+          const isSpeaker = role === "speaker" || role === "host";
+          const isHostRole = role === "host";
 
           return (
             <motion.div 
@@ -206,53 +376,83 @@ function AudioGrid() {
               exit={{ opacity: 0, scale: 0.8 }}
               transition={{ type: "spring", stiffness: 200, damping: 20 }}
               className="flex flex-col items-center gap-3"
+              onClick={() => {
+                if (isHost && !isLocal) {
+                  onSelectParticipant({ identity: p.identity, name: p.name || "User" });
+                }
+              }}
             >
               <div className="relative">
-                {isSpeaking && (
+                {/* ✅ Terracotta Glowing Ring for Speakers/Host */}
+                {isSpeaker && (
                   <motion.div
                     initial={{ opacity: 0, scale: 0.8 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    className="absolute -inset-2 rounded-full border-2 border-[#6B4A3A]"
+                    className={cn(
+                      "absolute -inset-2 rounded-full border-2",
+                      isSpeaking ? "border-[#10B981]" : "border-[#6B4A3A]" 
+                    )}
                     style={{ zIndex: -1 }}
                   >
-                    <motion.div 
-                      animate={{ scale: [1, 1.05, 1], opacity: [0.3, 0.6, 0.3] }}
-                      transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-                      className="absolute inset-0 rounded-full border-2 border-[#6B4A3A]"
-                    />
+                     {isSpeaking && (
+                       <motion.div 
+                         animate={{ scale: [1, 1.05, 1], opacity: [0.3, 0.6, 0.3] }}
+                         transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                         className="absolute inset-0 rounded-full border-2 border-[#10B981]"
+                       />
+                     )}
                   </motion.div>
                 )}
 
                 <div
                   className={cn(
                     "relative flex h-24 w-24 sm:h-32 sm:w-32 items-center justify-center rounded-full border-[3px] transition-all duration-300 overflow-hidden shadow-sm",
-                    isSpeaking 
-                      ? "border-[#6B4A3A]" 
-                      : "border-border"
+                    isHostRole ? "border-[#FAF9F6]" // Gold/White ring for Host
+                    : isSpeaker ? "border-[#6B4A3A]" // Terracotta ring for Speaker
+                    : "border-border"
                   )}
                 >
                   {avatarUrl ? (
-                    <Image 
-                      src={avatarUrl} 
-                      alt={p.name || "User"} 
-                      fill 
-                      sizes="(max-width: 768px) 100vw, 160px" 
-                      className="object-cover" 
-                    />
+                    <Image src={avatarUrl} alt={p.name || "User"} fill sizes="(max-width: 768px) 100vw, 160px" className="object-cover" />
                   ) : (
-                    // ✅ Clean, elegant Terracotta fallback for no-avatar users
                     <div className="flex h-full w-full items-center justify-center bg-[#6B4A3A] text-white">
                       <span className="text-4xl sm:text-5xl font-serif font-medium">
                         {p.name?.[0]?.toUpperCase() ?? "?"}
                       </span>
                     </div>
                   )}
+
+                  {/* ✅ Overlapping Crown Badge for Host */}
+                  {isHostRole && (
+                    <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 flex h-7 w-7 items-center justify-center rounded-full bg-[#6B4A3A] border-2 border-background shadow-lg z-10">
+                      <Crown size={12} className="text-[#FAF9F6]" />
+                    </div>
+                  )}
+
+                  {/* Role Badge for Speakers */}
+                  {role === "speaker" && (
+                    <div className="absolute bottom-1 right-1 flex h-6 w-6 items-center justify-center rounded-full bg-background shadow-md">
+                      <Mic size={12} className="text-[#10B981]" />
+                    </div>
+                  )}
+
+                  {/* Role Badge for Listeners */}
+                  {role === "listener" && (
+                    <div className="absolute bottom-1 right-1 flex h-6 w-6 items-center justify-center rounded-full bg-background shadow-md">
+                      <Headphones size={12} className="text-neutral-400" />
+                    </div>
+                  )}
                 </div>
               </div>
               
-              <span className="text-[14px] sm:text-[15px] font-medium text-foreground tracking-wide">
-                {isLocal ? "You" : p.name || "Guest"}
-              </span>
+              <div className="flex flex-col items-center">
+                <span className="text-[14px] sm:text-[15px] font-medium text-foreground tracking-wide">
+                  {isLocal ? "You" : p.name || "Guest"}
+                </span>
+                <span className="text-[11px] font-medium text-muted-foreground capitalize">
+                  {isHostRole ? "Host" : role}
+                </span>
+              </div>
             </motion.div>
           );
         })}
@@ -265,12 +465,12 @@ function AudioGrid() {
 /*  Control Dock                                                              */
 /* -------------------------------------------------------------------------- */
 
-function ControlDock({ onLeave }: { onLeave: () => void }) {
+function ControlDock({ onLeave, isListener }: { onLeave: () => void; isListener: boolean }) {
   const { localParticipant } = useLocalParticipant();
-  const [isMuted, setIsMuted] = useState(false);
+  const [isMuted, setIsMuted] = useState(isListener);
 
   const toggleMic = async () => {
-    if (!localParticipant) return;
+    if (isListener || !localParticipant) return;
     await localParticipant.setMicrophoneEnabled(isMuted);
     setIsMuted(!isMuted);
   };
@@ -279,14 +479,16 @@ function ControlDock({ onLeave }: { onLeave: () => void }) {
     <div className="flex items-center gap-5 sm:gap-6 rounded-full bg-white/70 dark:bg-black/50 px-5 sm:px-6 py-3 sm:py-4 backdrop-blur-xl border border-black/5 dark:border-white/10 shadow-xl">
       <button
         onClick={toggleMic}
+        disabled={isListener}
         className={cn(
           "flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-full transition-all duration-200 active:scale-95 shadow-sm",
-          isMuted 
+          isListener ? "opacity-50 cursor-not-allowed bg-neutral-200 dark:bg-neutral-800" 
+          : isMuted 
             ? "bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-400" 
             : "bg-neutral-100 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-700"
         )}
       >
-        {isMuted ? <MicOff size={22} /> : <Mic size={22} />}
+        {isMuted || isListener ? <MicOff size={22} /> : <Mic size={22} />}
       </button>
 
       <button 
