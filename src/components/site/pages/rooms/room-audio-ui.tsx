@@ -54,7 +54,7 @@ export function RoomAudioUI({
 
   useSpeakerRequests(isHost);
 
-  // ✅ Lock scroll on mount to prevent the page behind from scrolling
+  // ✅ Lock page scroll
   useEffect(() => {
     const originalStyle = window.getComputedStyle(document.body).overflow;
     document.body.style.overflow = "hidden";
@@ -63,23 +63,39 @@ export function RoomAudioUI({
     };
   }, []);
 
+  // ✅ 1. Safe Tab Close Handler
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      // Show the browser warning
       e.preventDefault();
       e.returnValue = "";
-      leaveRoom({ roomId }).catch(console.error);
     };
+
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [roomId]);
+  }, []);
 
+  // ✅ 2. When the user clicks "Leave Room"
   const handleLeave = () => {
     setDialogType(null);
     setIsPending(true);
     sessionStorage.setItem("room-toast", "You left the room.");
+    // The actual DB/cache update happens in the background
+    leaveRoom({ roomId }).catch(console.error);
     router.push("/rooms");
     router.refresh();
-    leaveRoom({ roomId }).catch(console.error);
+  };
+
+  // ✅ 3. When the tab closes, the LiveKit connection unmounts automatically.
+  // We catch it here to update the DB.
+  const handleDisconnected = () => {
+    if (!isPending) {
+      // The user didn't click "Leave", so it was likely a tab close or a kick
+      sessionStorage.setItem("room-toast", "You left the room.");
+      leaveRoom({ roomId }).catch(console.error);
+    }
+    router.push("/rooms");
+    router.refresh();
   };
 
   const handleDeleteRoom = async () => {
@@ -108,14 +124,6 @@ export function RoomAudioUI({
     router.refresh();
   };
 
-  const handleDisconnected = () => {
-    if (!isPending) {
-      sessionStorage.setItem("room-toast", "The host closed the room.");
-    }
-    router.push("/rooms");
-    router.refresh();
-  };
-
   return (
     <>
       <LiveKitRoom
@@ -124,8 +132,7 @@ export function RoomAudioUI({
         connect={true}
         audio={initialRole !== "listener"}
         video={false}
-        onDisconnected={handleDisconnected}
-        // ✅ FIXED: Added z-[9999] to sit on top of footer, added `bg-background` to make it fully opaque.
+        onDisconnected={handleDisconnected} // ✅ Catches tab close
         className="fixed inset-0 z-9999 flex h-dvh w-screen flex-col overflow-hidden bg-background text-foreground"
       >
         {/* Top Header */}
