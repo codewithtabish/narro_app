@@ -63,34 +63,18 @@ export function RoomAudioUI({
     };
   }, []);
 
-  // ✅ 1. Safe Tab Close Handler
-  useEffect(() => {
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      // Show the browser warning
-      e.preventDefault();
-      e.returnValue = "";
-    };
-
-    window.addEventListener("beforeunload", handleBeforeUnload);
-    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, []);
-
-  // ✅ 2. When the user clicks "Leave Room"
   const handleLeave = () => {
     setDialogType(null);
     setIsPending(true);
     sessionStorage.setItem("room-toast", "You left the room.");
-    // The actual DB/cache update happens in the background
     leaveRoom({ roomId }).catch(console.error);
     router.push("/rooms");
     router.refresh();
   };
 
-  // ✅ 3. When the tab closes, the LiveKit connection unmounts automatically.
-  // We catch it here to update the DB.
+  // ✅ 1. The ONLY cleanup that matters. When the tab closes or LiveKit disconnects.
   const handleDisconnected = () => {
     if (!isPending) {
-      // The user didn't click "Leave", so it was likely a tab close or a kick
       sessionStorage.setItem("room-toast", "You left the room.");
       leaveRoom({ roomId }).catch(console.error);
     }
@@ -132,7 +116,7 @@ export function RoomAudioUI({
         connect={true}
         audio={initialRole !== "listener"}
         video={false}
-        onDisconnected={handleDisconnected} // ✅ Catches tab close
+        onDisconnected={handleDisconnected} // ✅ Catches the tab close cleanly
         className="fixed inset-0 z-9999 flex h-dvh w-screen flex-col overflow-hidden bg-background text-foreground"
       >
         {/* Top Header */}
