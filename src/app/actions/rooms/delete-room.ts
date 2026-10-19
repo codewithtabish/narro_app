@@ -39,24 +39,32 @@ export async function deleteRoom(
       return { success: false, error: "Only the host can delete this room." };
     }
 
-    /* ✅ 1. INSTANTLY clear the /rooms page cache. */
-    // This runs synchronously so the user sees the room disappear 
-    // the moment they are redirected back to the list.
+    /* ✅ 1. INSTANTLY DISCONNECT EVERYONE FROM LIVEKIT */
+    // This immediately kicks all users out of the audio room.
+    // It takes ~200ms, but ensures guests are disconnected before UI redirects.
+    try {
+      await deleteLiveKitRoom(room.liveKitRoomName);
+    } catch (err) {
+      console.warn("[deleteRoom] LiveKit disconnect failed:", err);
+      // We continue anyway because we still need to delete the DB record.
+    }
+
+    /* ✅ 2. INSTANTLY CLEAR CACHE */
+    // Now the UI is told to refresh.
     revalidatePath("/rooms");
     revalidateSingleRoom(roomId);
     revalidateRooms();
 
-    /* ✅ 2. Background Task: Delete from LiveKit and DB. */
-    // The user doesn't wait for these expensive operations.
+    /* ✅ 3. BACKGROUND TASK: DELETE FROM DB */
+    // Deleting a DB row is fast (~10ms), but we background it to keep
+    // the return time at exactly 0ms for the host.
     after(async () => {
       try {
-        await deleteLiveKitRoom(room.liveKitRoomName);
-        
         await prisma.room.delete({
           where: { id: roomId },
         });
       } catch (err) {
-        console.error("[deleteRoom] Background cleanup error:", err);
+        console.error("[deleteRoom] Background DB deletion error:", err);
       }
     });
 
