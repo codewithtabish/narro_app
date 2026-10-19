@@ -52,7 +52,7 @@ export function RoomAudioUI({
   const [hasRequested, setHasRequested] = useState(!!myPendingRequestId);
   const [selectedParticipant, setSelectedParticipant] = useState<{ identity: string; name: string } | null>(null);
   
-  // ✅ 1. Use a ref to prevent false disconnects during Next.js refreshes
+  // ✅ 1. Use a ref to prevent false disconnects during Next.js background refreshes
   const intentionalLeaveRef = useRef(false);
 
   useSpeakerRequests(isHost);
@@ -104,18 +104,15 @@ export function RoomAudioUI({
     }
   };
 
-  // ✅ 2. Only redirect on disconnect if the user intentionally left (or the host closed the room)
+  // ✅ 2. Only redirect on disconnect if the user intentionally left
   const handleDisconnected = () => {
     if (intentionalLeaveRef.current) {
-      // User clicked Leave or Delete. Do nothing here, let the router handle it.
-      return;
+      return; // Do nothing. The router will handle the redirect.
     }
 
-    // If it wasn't intentional, it means the host closed the room.
-    sessionStorage.setItem("room-toast", "The host closed the room.");
-    leaveRoom({ roomId }).catch(console.error);
-    router.push("/rooms");
-    router.refresh();
+    // If it wasn't intentional, it was likely a background cache refresh.
+    // We do NOT redirect. The LiveKitRoom will silently reconnect.
+    console.log("[RoomAudioUI] Disconnected unexpectedly. Reconnecting...");
   };
 
   const handleRequestSpeaker = async () => {
