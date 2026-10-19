@@ -6,8 +6,6 @@ import { NextResponse } from "next/server";
 import { ADMIN_EMAILS } from "@/lib/admin-emails";
 
 const ADMIN_PREFIXES = ["/dashboard", "/agent"];
-
-// ✅ Protected Routes (Requires Login)
 const PROTECTED_PREFIXES = [
   "/app", 
   "/rooms/active", 
@@ -38,7 +36,6 @@ function isAdminEmail(email: string | null | undefined): boolean {
 export default clerkMiddleware(async (auth, req) => {
   const { pathname } = req.nextUrl;
 
-  // Public API endpoints handle their own authorization.
   if (matchesPrefix(pathname, PUBLIC_API_PREFIXES)) {
     return NextResponse.next();
   }
@@ -50,18 +47,12 @@ export default clerkMiddleware(async (auth, req) => {
 
   if (isAdminRoute) {
     if (!userId) {
-      const signInUrl = new URL("/sign-in", req.url);
-      signInUrl.searchParams.set("redirect_url", req.url);
-      return NextResponse.redirect(signInUrl);
+      // Since you use Modals, send them to the home page, they'll see the admin lock
+      return NextResponse.redirect(new URL("/", req.url));
     }
 
-    let role = (
-      sessionClaims?.metadata as { role?: string } | undefined
-    )?.role;
-
-    if (role === "ADMIN") {
-      return NextResponse.next();
-    }
+    let role = (sessionClaims?.metadata as { role?: string } | undefined)?.role;
+    if (role === "ADMIN") return NextResponse.next();
 
     try {
       const client = await clerkClient();
@@ -87,17 +78,15 @@ export default clerkMiddleware(async (auth, req) => {
     }
   }
 
-  // ── ✅ PROTECT ACTIVE ROOMS & COMMUNITY CALLS ──
+  // ── ✅ PROTECT ACTIVE ROOMS & CALLS (MODAL APPROACH) ──
   const isProtectedRoute = matchesPrefix(pathname, PROTECTED_PREFIXES);
 
   if (isProtectedRoute && !userId) {
-    const signInUrl = new URL("/sign-in", req.url);
-    // After login, redirect them straight back to the room/call
-    signInUrl.searchParams.set("redirect_url", req.url);
-    return NextResponse.redirect(signInUrl);
+    // Since you don't have a /sign-in page, we redirect them back to the room list.
+    // The `RoomCard` (which we updated earlier) will handle showing the Clerk Modal.
+    return NextResponse.redirect(new URL("/rooms", req.url));
   }
 
-  // ── EVERYTHING ELSE IS PUBLIC ──
   return NextResponse.next();
 });
 
