@@ -59,12 +59,6 @@ interface RoomAudioUIProps {
   myPendingRequestId: string | null;
 }
 
-/**
- * Page-level width WITHOUT horizontal padding:
- * keeps a 1rem gap on each side on phones, caps width on desktop.
- */
-const SHELL_NARROW = "mx-auto w-[min(100%_-_2rem,56rem)]";
-const SHELL_WIDE = "mx-auto w-[min(100%_-_2rem,72rem)]";
 const DIALOG_WIDTH = "w-[min(100%_-_2rem,24rem)]";
 
 const haptic = () => {
@@ -94,7 +88,7 @@ function parseMeta(p: Participant): { role: Role; avatarUrl: string | null } {
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Outer shell: owns the LiveKit connection                                  */
+/*  Outer shell                                                               */
 /* -------------------------------------------------------------------------- */
 
 export function RoomAudioUI(props: RoomAudioUIProps) {
@@ -106,7 +100,6 @@ export function RoomAudioUI(props: RoomAudioUIProps) {
   const handleDisconnected = (reason?: DisconnectReason) => {
     if (intentionalLeaveRef.current) return;
 
-    // Only react to server-side removals. LiveKitRoom already retries network drops.
     let message: string | null = null;
     if (reason === DisconnectReason.ROOM_DELETED) message = "The host closed the room.";
     else if (reason === DisconnectReason.PARTICIPANT_REMOVED) message = "You were removed from the room.";
@@ -137,7 +130,6 @@ export function RoomAudioUI(props: RoomAudioUIProps) {
         onToggleDeafen={() => setDeafened((d) => !d)}
       />
       <RoomAudioRenderer volume={deafened ? 0 : 1} />
-      {/* Only visible if the browser blocks autoplay */}
       <StartAudio
         label="Tap to enable audio"
         className="fixed left-1/2 top-24 z-50 -translate-x-1/2 rounded-full bg-[#6B4A3A] px-5 py-2.5 text-sm font-semibold text-white shadow-lg"
@@ -167,14 +159,12 @@ const PARTICIPANT_EVENTS: RoomEvent[] = [
   RoomEvent.LocalTrackUnpublished,
 ];
 
-/** All participants, re-rendering on every change that matters to the UI. */
 function useRoomParticipants(): Participant[] {
   const room = useRoomContext();
   const [, force] = useReducer((n: number) => n + 1, 0);
 
   useEffect(() => {
     const handler = () => force();
-    // Cast: one shared no-arg handler for many differently-typed events.
     PARTICIPANT_EVENTS.forEach((e) => room.on(e, handler as never));
     return () => {
       PARTICIPANT_EVENTS.forEach((e) => room.off(e, handler as never));
@@ -184,10 +174,6 @@ function useRoomParticipants(): Participant[] {
   return [room.localParticipant, ...Array.from(room.remoteParticipants.values())];
 }
 
-/**
- * My live role, read straight from LiveKit (external store).
- * Changes the moment the host approves / removes me. No setState-in-effect.
- */
 function useMyRole(initialRole: Role): Role {
   const room = useRoomContext();
 
@@ -213,7 +199,7 @@ function useMyRole(initialRole: Role): Role {
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Main content (inside LiveKit context)                                     */
+/*  Main content                                                              */
 /* -------------------------------------------------------------------------- */
 
 function RoomContent({
@@ -242,13 +228,11 @@ function RoomContent({
   const [selected, setSelected] = useState<{ identity: string; name: string; role: Role } | null>(null);
   const [notice, setNotice] = useState<{ text: string; tone: Tone } | null>(null);
 
-  // A raised hand only means something while I'm a listener
   const raised = hasRequested && myRole === "listener";
 
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fetchSeq = useRef(0);
   const knownIds = useRef(new Set(pendingRequests.map((r) => r.id)));
-  // Requests the host is acting on right now: never let a refetch resurrect them.
   const handledIds = useRef(new Set<string>());
   const prevRole = useRef<Role>(initialRole);
 
@@ -265,13 +249,11 @@ function RoomContent({
     [],
   );
 
-  /* ----------------------------- HOST: refetch ----------------------------- */
-
   const refetchRequests = useCallback(async () => {
     const seq = ++fetchSeq.current;
     try {
       const raw = await getSpeakerRequests(roomId);
-      if (seq !== fetchSeq.current) return; // a newer fetch won
+      if (seq !== fetchSeq.current) return;
 
       const fresh = raw.filter((r) => !handledIds.current.has(r.id));
       const newcomers = fresh.filter((r) => !knownIds.current.has(r.id));
@@ -291,11 +273,9 @@ function RoomContent({
     }
   }, [roomId, showNotice]);
 
-  // Initial sync + resync on reconnect / tab focus (covers any missed signal). No polling.
   useEffect(() => {
     if (!isHost) return;
 
-    // Deferred so no state is set during the effect body itself
     const initial = setTimeout(() => {
       void refetchRequests();
     }, 0);
@@ -316,8 +296,6 @@ function RoomContent({
     };
   }, [isHost, room, refetchRequests]);
 
-  /* -------------------- Real-time signals from the server ------------------ */
-
   useEffect(() => {
     const onData = (
       payload: Uint8Array,
@@ -325,7 +303,6 @@ function RoomContent({
       _kind?: unknown,
       topic?: string,
     ) => {
-      // Only trust signals sent by the server (no participant = server API)
       if (topic !== ROOM_SIGNAL_TOPIC || participant) return;
       const signal = decodeRoomSignal(payload);
       if (!signal) return;
@@ -351,9 +328,6 @@ function RoomContent({
     };
   }, [room, isHost, refetchRequests, showNotice]);
 
-  /* ------------------ React to my own role changing live ------------------- */
-  // Runs inside the LiveKit event callback (not in an effect body), so it can set state safely.
-
   useEffect(() => {
     const local = room.localParticipant;
 
@@ -371,7 +345,7 @@ function RoomContent({
         showNotice("You're now a speaker 🎤", "success");
         haptic();
         local.setMicrophoneEnabled(true).catch(async () => {
-          await sleep(700); // permission can land a beat after metadata
+          await sleep(700);
           try {
             await local.setMicrophoneEnabled(true);
           } catch {
@@ -388,8 +362,6 @@ function RoomContent({
       local.off(ParticipantEvent.ParticipantMetadataChanged, onMetadata);
     };
   }, [room, showNotice]);
-
-  /* ------------------------------ Page chrome ------------------------------ */
 
   useEffect(() => {
     const originalStyle = window.getComputedStyle(document.body).overflow;
@@ -408,15 +380,12 @@ function RoomContent({
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, []);
 
-  /* -------------------------------- Handlers ------------------------------- */
-
   const handleLeave = () => {
     setDialogType(null);
     setIsPending(true);
     intentionalLeaveRef.current = true;
-
     sessionStorage.setItem("room-toast", "You left the room.");
-    room.disconnect().catch(() => {}); // others see you leave instantly
+    room.disconnect().catch(() => {});
     leaveRoom({ roomId }).catch(console.error);
     router.push("/rooms");
     router.refresh();
@@ -439,7 +408,6 @@ function RoomContent({
     }
   };
 
-  // GUEST: raise hand (instant)
   const handleRequestSpeaker = async () => {
     setHasRequested(true);
     haptic();
@@ -450,7 +418,6 @@ function RoomContent({
     }
   };
 
-  // GUEST: cancel (instant)
   const handleCancelRequest = async () => {
     setHasRequested(false);
     const res = await cancelSpeakerRequest(roomId);
@@ -460,12 +427,11 @@ function RoomContent({
     }
   };
 
-  // HOST: approve / decline (instant)
   const handleApproveRequest = async (
     req: SpeakerRequestItem,
     status: "APPROVED" | "DECLINED",
   ) => {
-    handledIds.current.add(req.id); // refetches can't bring this card back
+    handledIds.current.add(req.id);
     knownIds.current.delete(req.id);
     setLiveRequests((prev) => prev.filter((r) => r.id !== req.id));
     haptic();
@@ -478,10 +444,9 @@ function RoomContent({
     if (!res.success) showNotice(res.error ?? "Could not update the request.", "error");
 
     handledIds.current.delete(req.id);
-    void refetchRequests(); // settle on the server's truth (restores the card on failure)
+    void refetchRequests();
   };
 
-  // HOST: moderation (dialog closes instantly)
   const handleForceMute = async () => {
     if (!selected) return;
     const target = selected;
@@ -500,8 +465,6 @@ function RoomContent({
     if (!res.success) showNotice(res.error ?? "Could not move this person.", "error");
   };
 
-  const showRequestsRow = (isHost && liveRequests.length > 0) || (!isHost && raised);
-
   return (
     <>
       {/* Top Header */}
@@ -509,20 +472,18 @@ function RoomContent({
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, ease: "easeOut" }}
-        className="absolute inset-x-0 top-0 z-20 bg-linear-to-b from-background to-transparent py-6"
+        className="absolute inset-x-0 top-0 z-30 border-b border-border/50 bg-background/80 backdrop-blur-md"
       >
-        <div className={cn(SHELL_WIDE, "relative flex items-center justify-between")}>
-          <div className="font-serif text-[24px] sm:text-[28px] tracking-tight text-foreground">NARRO</div>
-          <div className="absolute left-1/2 max-w-[45%] -translate-x-1/2 truncate text-base sm:text-xl font-medium text-foreground">
+        <div className="mx-auto flex w-full max-w-[1400px] items-center justify-between px-6 py-4">
+          <div className="font-serif text-[24px] tracking-tight text-foreground">NARRO</div>
+          <div className="absolute left-1/2 max-w-[45%] -translate-x-1/2 truncate text-base font-medium text-foreground">
             {roomTitle}
           </div>
-
           {isHost && (
             <button
               onClick={() => setDialogType("delete")}
               disabled={isPending}
-              aria-label="Delete room"
-              className="flex items-center gap-2 rounded-full bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-500 backdrop-blur-md transition-colors hover:bg-red-500/20 disabled:opacity-50"
+              className="flex items-center gap-2 rounded-full bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-500 transition-colors hover:bg-red-500/20 disabled:opacity-50"
             >
               <Trash2 className="h-4 w-4" />
               <span className="hidden sm:inline">Delete Room</span>
@@ -531,92 +492,40 @@ function RoomContent({
         </div>
       </motion.header>
 
-      {/* Scrollable Center Area */}
-      <div className="relative z-10 flex-1 overflow-y-auto custom-scrollbar">
-        {showRequestsRow && (
-          <div className={cn(SHELL_NARROW, "flex flex-col items-center pt-24 pb-4")}>
-            <span className="mb-4 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-              {isHost ? `Speaker Requests · ${liveRequests.length}` : "Waiting Room"}
-            </span>
+      {/* Main 3-Column Layout */}
+      <div className="mt-[73px] flex flex-1 overflow-hidden">
+        {/* Left Sidebar: Audience */}
+        <aside className="hidden w-64 flex-col overflow-y-auto border-r border-border/50 p-4 md:flex custom-scrollbar">
+          <AudienceSidebar />
+        </aside>
 
-            {/* w-max + max-w-full + mx-auto: centered, and never clips when it overflows */}
-            <div className="mx-auto flex w-max max-w-full gap-4 overflow-x-auto pb-4">
-              <AnimatePresence mode="popLayout">
-                {isHost &&
-                  liveRequests.map((req) => (
-                    <motion.div
-                      key={req.id}
-                      layout
-                      initial={{ opacity: 0, scale: 0.9 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.9 }}
-                      className="flex min-w-[100px] flex-col items-center gap-2 rounded-2xl border border-border bg-muted/50 p-3"
-                    >
-                      <div className="relative flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-[#6B4A3A] font-serif text-lg text-white">
-                        {req.avatarUrl ? (
-                          <Image src={req.avatarUrl} alt={req.name} fill sizes="48px" className="object-cover" />
-                        ) : (
-                          req.name[0]?.toUpperCase()
-                        )}
-                      </div>
-                      <span className="w-20 truncate text-center text-xs font-medium text-foreground">{req.name}</span>
-                      <div className="flex w-full gap-2">
-                        <button
-                          onClick={() => handleApproveRequest(req, "DECLINED")}
-                          aria-label={`Decline ${req.name}`}
-                          className="flex flex-1 items-center justify-center rounded-full bg-red-500/10 py-1.5 text-red-500 transition hover:bg-red-500/20 active:scale-95"
-                        >
-                          <X size={14} />
-                        </button>
-                        <button
-                          onClick={() => handleApproveRequest(req, "APPROVED")}
-                          aria-label={`Approve ${req.name}`}
-                          className="flex flex-1 items-center justify-center rounded-full bg-emerald-500/10 py-1.5 text-emerald-500 transition hover:bg-emerald-500/20 active:scale-95"
-                        >
-                          <Check size={14} />
-                        </button>
-                      </div>
-                    </motion.div>
-                  ))}
+        {/* Center: Stage */}
+        <main className="relative flex flex-1 flex-col overflow-y-auto custom-scrollbar p-6">
+          <RoomStage isHost={isHost} onManage={(p) => setSelected(p)} />
+        </main>
 
-                {!isHost && raised && (
-                  <motion.div
-                    key="my-request"
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.9 }}
-                    className="flex min-w-[100px] flex-col items-center gap-2 rounded-2xl border border-[#6B4A3A]/30 bg-[#6B4A3A]/10 p-3"
-                  >
-                    <div className="relative flex h-12 w-12 animate-pulse items-center justify-center overflow-hidden rounded-full bg-[#6B4A3A] font-serif text-lg text-white">
-                      You
-                    </div>
-                    <span className="w-20 truncate text-center text-xs font-medium text-[#6B4A3A]">Hand raised ✋</span>
-                    <button
-                      onClick={handleCancelRequest}
-                      className="flex w-full items-center justify-center rounded-full bg-red-500/10 py-1.5 text-xs font-semibold text-red-500 transition hover:bg-red-500/20 active:scale-95"
-                    >
-                      Cancel
-                    </button>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          </div>
-        )}
-
-        <RoomStage
-          isHost={isHost}
-          topPadded={!showRequestsRow}
-          onManage={(p) => setSelected(p)}
-        />
+        {/* Right Sidebar: Requests */}
+        <aside className="hidden w-72 flex-col overflow-y-auto border-l border-border/50 p-4 lg:flex custom-scrollbar">
+          {isHost ? (
+            <RequestsSidebar
+              requests={liveRequests}
+              onApprove={handleApproveRequest}
+            />
+          ) : (
+            <MyRequestSidebar
+              raised={raised}
+              onCancel={handleCancelRequest}
+            />
+          )}
+        </aside>
       </div>
 
-      {/* Bottom Dock */}
+      {/* Bottom Dock & Notices */}
       <motion.div
         initial={{ opacity: 0, y: 40 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, delay: 0.2, ease: "easeOut" }}
-        className="absolute inset-x-0 bottom-0 z-20 flex flex-col items-center gap-4 bg-linear-to-t from-background via-background/90 to-transparent pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-12"
+        className="absolute inset-x-0 bottom-0 z-30 flex flex-col items-center gap-3 bg-linear-to-t from-background via-background/90 to-transparent pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-12"
       >
         <AnimatePresence>
           {notice && (
@@ -658,7 +567,7 @@ function RoomContent({
         </p>
       </motion.div>
 
-      {/* Host Moderation Dialog */}
+      {/* Dialogs (same logic, just styled nicely) */}
       <AnimatePresence>
         {selected && (
           <div className="fixed inset-0 z-10000 flex items-center justify-center">
@@ -676,7 +585,6 @@ function RoomContent({
               className={cn(DIALOG_WIDTH, "relative rounded-[24px] border border-border bg-card p-6 text-center shadow-2xl")}
             >
               <h3 className="font-serif text-xl text-card-foreground">Manage {selected.name}</h3>
-
               {selected.role === "speaker" ? (
                 <div className="mt-6 flex flex-col gap-3">
                   <button
@@ -697,7 +605,6 @@ function RoomContent({
                   This person is in the audience. They can raise their hand to speak.
                 </p>
               )}
-
               <button
                 onClick={() => setSelected(null)}
                 className="mt-4 text-sm font-semibold text-muted-foreground hover:text-foreground"
@@ -709,7 +616,6 @@ function RoomContent({
         )}
       </AnimatePresence>
 
-      {/* Leave / Delete Dialog */}
       <AnimatePresence>
         {dialogType && (
           <div className="fixed inset-0 z-10000 flex items-center justify-center">
@@ -763,16 +669,139 @@ function RoomContent({
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Stage + Audience                                                          */
+/*  Sidebars & Stage Components                                               */
 /* -------------------------------------------------------------------------- */
+
+function AudienceSidebar() {
+  const participants = useRoomParticipants();
+  const audience = participants
+    .map((p) => ({ p, ...parseMeta(p) }))
+    .filter((e) => e.role === "listener");
+
+  return (
+    <>
+      <div className="mb-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        Audience · {audience.length}
+      </div>
+      <div className="flex flex-col gap-3">
+        {audience.map(({ p, avatarUrl }) => (
+          <div key={p.identity} className="flex items-center gap-3">
+            <div className="relative h-8 w-8 shrink-0 overflow-hidden rounded-full border border-border">
+              {avatarUrl ? (
+                <Image src={avatarUrl} alt="avatar" fill className="object-cover" />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center bg-[#6B4A3A] text-xs text-white">
+                  {p.name?.[0]?.toUpperCase()}
+                </div>
+              )}
+            </div>
+            <div className="flex flex-col">
+              <span className="max-w-[120px] truncate text-sm font-medium text-foreground">
+                {p.isLocal ? "You" : p.name}
+              </span>
+              <span className="text-[11px] text-muted-foreground">Listening</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
+function RequestsSidebar({
+  requests,
+  onApprove,
+}: {
+  requests: SpeakerRequestItem[];
+  onApprove: (req: SpeakerRequestItem, status: "APPROVED" | "DECLINED") => void;
+}) {
+  return (
+    <>
+      <div className="mb-4 text-xs font-semibold uppercase tracking-wider text-[#6B4A3A]">
+        Speaker Requests · {requests.length}
+      </div>
+
+      {requests.length === 0 ? (
+        <div className="mt-10 flex flex-col items-center text-center text-muted-foreground">
+          <Hand className="mb-2 h-8 w-8 opacity-20" />
+          <p className="text-sm font-medium text-foreground">No requests right now</p>
+          <p className="mt-1 text-xs">When someone wants to speak, they&apos;ll appear here.</p>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {requests.map((req) => (
+            <motion.div
+              key={req.id}
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="flex items-center justify-between rounded-xl border border-border bg-card p-3 shadow-sm"
+            >
+              <div className="flex items-center gap-3">
+                <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full bg-muted">
+                  {req.avatarUrl ? (
+                    <Image src={req.avatarUrl} alt={req.name} fill className="object-cover" />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center bg-[#6B4A3A] text-sm text-white">
+                      {req.name[0]?.toUpperCase()}
+                    </div>
+                  )}
+                </div>
+                <div className="flex flex-col">
+                  <span className="max-w-[100px] truncate text-sm font-medium text-foreground">{req.name}</span>
+                  <span className="text-[11px] text-muted-foreground">Wants to speak</span>
+                </div>
+              </div>
+              <div className="flex gap-1.5">
+                <button
+                  onClick={() => onApprove(req, "DECLINED")}
+                  className="flex h-8 w-8 items-center justify-center rounded-full bg-red-500/10 text-red-500 hover:bg-red-500/20 active:scale-95"
+                >
+                  <X size={16} />
+                </button>
+                <button
+                  onClick={() => onApprove(req, "APPROVED")}
+                  className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 active:scale-95"
+                >
+                  <Check size={16} />
+                </button>
+              </div>
+            </motion.div>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+function MyRequestSidebar({ raised, onCancel }: { raised: boolean; onCancel: () => void }) {
+  if (!raised) return null;
+
+  return (
+    <>
+      <div className="mb-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        Your Status
+      </div>
+      <div className="flex flex-col items-center gap-3 rounded-xl border border-[#6B4A3A]/30 bg-[#6B4A3A]/5 p-4 text-center">
+        <div className="relative flex h-12 w-12 animate-pulse items-center justify-center rounded-full bg-[#6B4A3A] font-serif text-lg text-white">
+          You
+        </div>
+        <span className="text-sm font-medium text-[#6B4A3A]">Hand raised ✋</span>
+        <button
+          onClick={onCancel}
+          className="mt-1 w-full rounded-full bg-red-500/10 py-2 text-xs font-semibold text-red-500 transition hover:bg-red-500/20 active:scale-95"
+        >
+          Cancel Request
+        </button>
+      </div>
+    </>
+  );
+}
 
 function RoomStage({
   isHost,
-  topPadded,
   onManage,
 }: {
   isHost: boolean;
-  topPadded: boolean;
   onManage: (p: { identity: string; name: string; role: Role }) => void;
 }) {
   const participants = useRoomParticipants();
@@ -780,23 +809,16 @@ function RoomStage({
   const entries = participants.map((p) => ({ p, ...parseMeta(p) }));
   const stage = entries
     .filter((e) => e.role !== "listener")
-    .sort((a, b) => Number(b.role === "host") - Number(a.role === "host")); // host first
-  const audience = entries.filter((e) => e.role === "listener");
+    .sort((a, b) => Number(b.role === "host") - Number(a.role === "host"));
 
   return (
-    <div
-      className={cn(
-        SHELL_NARROW,
-        "flex min-h-full flex-col items-center justify-center gap-12 pb-56",
-        topPadded ? "pt-32" : "pt-4",
-      )}
-    >
-      {stage.length > 0 && (
-        <section className="flex w-full flex-col items-center gap-6">
+    <div className="flex h-full flex-col items-center justify-center">
+      {stage.length > 0 ? (
+        <div className="flex w-full flex-col items-center gap-6">
           <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            On stage · {stage.length}
+            On Stage · {stage.length}
           </span>
-          <div className="grid w-full grid-cols-2 place-items-center gap-x-6 gap-y-10 sm:gap-x-12 sm:gap-y-16 md:grid-cols-3">
+          <div className="grid w-full max-w-3xl grid-cols-2 place-items-center gap-x-8 gap-y-12 sm:grid-cols-3">
             <AnimatePresence>
               {stage.map(({ p, role, avatarUrl }) => (
                 <ParticipantTile
@@ -804,7 +826,6 @@ function RoomStage({
                   p={p}
                   role={role}
                   avatarUrl={avatarUrl}
-                  size="lg"
                   onManage={
                     isHost && !p.isLocal
                       ? () => onManage({ identity: p.identity, name: p.name || "User", role })
@@ -814,33 +835,9 @@ function RoomStage({
               ))}
             </AnimatePresence>
           </div>
-        </section>
-      )}
-
-      {audience.length > 0 && (
-        <section className="flex w-full flex-col items-center gap-6">
-          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Audience · {audience.length}
-          </span>
-          <div className="grid w-full grid-cols-3 place-items-center gap-x-4 gap-y-8 sm:grid-cols-4 md:grid-cols-5">
-            <AnimatePresence>
-              {audience.map(({ p, role, avatarUrl }) => (
-                <ParticipantTile
-                  key={p.identity}
-                  p={p}
-                  role={role}
-                  avatarUrl={avatarUrl}
-                  size="sm"
-                  onManage={
-                    isHost && !p.isLocal
-                      ? () => onManage({ identity: p.identity, name: p.name || "User", role })
-                      : undefined
-                  }
-                />
-              ))}
-            </AnimatePresence>
-          </div>
-        </section>
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">No one is on stage yet.</p>
       )}
     </div>
   );
@@ -850,20 +847,16 @@ function ParticipantTile({
   p,
   role,
   avatarUrl,
-  size,
   onManage,
 }: {
   p: Participant;
   role: Role;
   avatarUrl: string | null;
-  size: "lg" | "sm";
   onManage?: () => void;
 }) {
-  const big = size === "lg";
   const isHostRole = role === "host";
-  const onStage = role !== "listener";
   const isSpeaking = p.isSpeaking && p.isMicrophoneEnabled;
-  const micOff = onStage && !p.isMicrophoneEnabled;
+  const micOff = !p.isMicrophoneEnabled;
   const name = p.isLocal ? "You" : p.name || "Guest";
 
   return (
@@ -872,54 +865,36 @@ function ParticipantTile({
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.8 }}
       transition={{ type: "spring", stiffness: 200, damping: 20 }}
-      className={cn("flex flex-col items-center gap-2.5", onManage && "cursor-pointer")}
+      className={cn("flex flex-col items-center gap-3", onManage && "cursor-pointer")}
       onClick={onManage}
-      onKeyDown={(e) => {
-        if (onManage && (e.key === "Enter" || e.key === " ")) {
-          e.preventDefault();
-          onManage();
-        }
-      }}
-      role={onManage ? "button" : undefined}
-      tabIndex={onManage ? 0 : undefined}
-      aria-label={onManage ? `Manage ${name}` : undefined}
     >
       <div className="relative isolate">
-        {onStage && (
-          <div
-            className={cn(
-              "absolute -inset-2 -z-10 rounded-full border-2 transition-colors",
-              isSpeaking ? "border-[#10B981]" : "border-[#6B4A3A]",
-            )}
-          >
-            {isSpeaking && (
-              <motion.div
-                animate={{ scale: [1, 1.08, 1], opacity: [0.3, 0.7, 0.3] }}
-                transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
-                className="absolute inset-0 rounded-full border-2 border-[#10B981]"
-              />
-            )}
-          </div>
-        )}
+        <div
+          className={cn(
+            "absolute -inset-2 -z-10 rounded-full border-2 transition-colors",
+            isSpeaking ? "border-[#10B981]" : "border-[#6B4A3A]",
+          )}
+        >
+          {isSpeaking && (
+            <motion.div
+              animate={{ scale: [1, 1.08, 1], opacity: [0.3, 0.7, 0.3] }}
+              transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
+              className="absolute inset-0 rounded-full border-2 border-[#10B981]"
+            />
+          )}
+        </div>
 
         <div
           className={cn(
-            "relative flex items-center justify-center overflow-hidden rounded-full border-[3px] shadow-sm transition-all duration-300",
-            big ? "h-24 w-24 sm:h-32 sm:w-32" : "h-16 w-16 sm:h-20 sm:w-20",
-            isHostRole ? "border-[#FAF9F6]" : onStage ? "border-[#6B4A3A]" : "border-border",
+            "relative flex h-28 w-28 items-center justify-center overflow-hidden rounded-full border-[3px] shadow-sm transition-all duration-300 sm:h-32 sm:w-32",
+            isHostRole ? "border-[#FAF9F6]" : "border-[#6B4A3A]",
           )}
         >
           {avatarUrl ? (
-            <Image
-              src={avatarUrl}
-              alt={name}
-              fill
-              sizes={big ? "(max-width: 768px) 96px, 128px" : "80px"}
-              className="object-cover"
-            />
+            <Image src={avatarUrl} alt={name} fill sizes="128px" className="object-cover" />
           ) : (
             <div className="flex h-full w-full items-center justify-center bg-[#6B4A3A] text-white">
-              <span className={cn("font-serif font-medium", big ? "text-4xl sm:text-5xl" : "text-2xl")}>
+              <span className="font-serif text-4xl font-medium sm:text-5xl">
                 {p.name?.[0]?.toUpperCase() ?? "?"}
               </span>
             </div>
@@ -932,38 +907,27 @@ function ParticipantTile({
           </div>
         )}
 
-        {onStage && !isHostRole && (
-          <div className="absolute bottom-0 right-0 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-background shadow-md">
-            {micOff ? (
-              <MicOff size={12} className="text-red-500" />
-            ) : (
-              <Mic size={12} className="text-[#10B981]" />
-            )}
+        {!isHostRole && (
+          <div className="absolute bottom-0 right-0 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-background shadow-md border border-border">
+            {micOff ? <MicOff size={13} className="text-red-500" /> : <Mic size={13} className="text-[#10B981]" />}
           </div>
         )}
       </div>
 
       <div className="flex flex-col items-center">
-        <span
-          className={cn(
-            "max-w-24 truncate font-medium tracking-wide text-foreground sm:max-w-32",
-            big ? "text-[14px] sm:text-[15px]" : "text-[12px]",
-          )}
-        >
+        <span className="max-w-[120px] truncate text-sm font-medium tracking-wide text-foreground">
           {name}
         </span>
-        {onStage && (
-          <span className="text-[11px] font-medium text-muted-foreground">
-            {isHostRole ? "Host" : "Speaker"}
-          </span>
-        )}
+        <span className="text-[12px] font-medium text-muted-foreground">
+          {isHostRole ? "Host" : "Speaker"}
+        </span>
       </div>
     </motion.div>
   );
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Control Dock (mic state comes from LiveKit, so force-mute shows up)       */
+/*  Control Dock                                                              */
 /* -------------------------------------------------------------------------- */
 
 function ControlDock({
@@ -979,9 +943,6 @@ function ControlDock({
 }) {
   const { localParticipant, isMicrophoneEnabled } = useLocalParticipant();
 
-  // Optimistic value remembers the LiveKit state it started from (`base`).
-  // The moment LiveKit's real state changes, the optimistic value is ignored
-  // automatically. Pure derivation: no effect, no cascading renders.
   const [optimistic, setOptimistic] = useState<{ value: boolean; base: boolean } | null>(null);
   const busy = useRef(false);
   const clearTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1003,16 +964,15 @@ function ControlDock({
     busy.current = true;
 
     const next = !micOn;
-    setOptimistic({ value: next, base: isMicrophoneEnabled }); // instant
+    setOptimistic({ value: next, base: isMicrophoneEnabled });
 
     try {
       await localParticipant.setMicrophoneEnabled(next);
     } catch (err) {
       console.error("Mic toggle failed", err);
-      setOptimistic(null); // snap back to LiveKit's truth
+      setOptimistic(null);
     } finally {
       busy.current = false;
-      // Safety net: never leave a stale optimistic value behind
       if (clearTimer.current) clearTimeout(clearTimer.current);
       clearTimer.current = setTimeout(() => setOptimistic(null), 1500);
     }
@@ -1023,7 +983,6 @@ function ControlDock({
       <button
         onClick={toggleMic}
         disabled={isListener}
-        aria-label={micOn ? "Mute microphone" : "Unmute microphone"}
         className={cn(
           "flex h-12 w-12 items-center justify-center rounded-full shadow-sm transition-all duration-200 active:scale-95 sm:h-14 sm:w-14",
           isListener
@@ -1038,7 +997,6 @@ function ControlDock({
 
       <button
         onClick={onLeave}
-        aria-label="Leave room"
         className="flex h-14 w-14 items-center justify-center rounded-full bg-[#EF4444] text-white shadow-lg transition-transform hover:scale-105 active:scale-95 sm:h-16 sm:w-16"
       >
         <PhoneOff size={26} />
@@ -1046,7 +1004,6 @@ function ControlDock({
 
       <button
         onClick={onToggleDeafen}
-        aria-label={deafened ? "Unmute room audio" : "Mute room audio"}
         className={cn(
           "flex h-12 w-12 items-center justify-center rounded-full shadow-sm transition-all duration-200 active:scale-95 sm:h-14 sm:w-14",
           deafened
