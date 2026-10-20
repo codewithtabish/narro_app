@@ -143,42 +143,28 @@ export function RoomAudioUI(props: RoomAudioUIProps) {
 /* -------------------------------------------------------------------------- */
 
 const PARTICIPANT_EVENTS: RoomEvent[] = [
-  RoomEvent.Connected,
-  RoomEvent.Reconnected,
-  RoomEvent.ConnectionStateChanged,
-  RoomEvent.ParticipantConnected,
-  RoomEvent.ParticipantDisconnected,
-  RoomEvent.ParticipantMetadataChanged,
-  RoomEvent.ParticipantNameChanged,
-  RoomEvent.ActiveSpeakersChanged,
-  RoomEvent.TrackMuted,
-  RoomEvent.TrackUnmuted,
-  RoomEvent.TrackPublished,
-  RoomEvent.TrackUnpublished,
-  RoomEvent.LocalTrackPublished,
-  RoomEvent.LocalTrackUnpublished,
+  RoomEvent.Connected, RoomEvent.Reconnected, RoomEvent.ConnectionStateChanged,
+  RoomEvent.ParticipantConnected, RoomEvent.ParticipantDisconnected,
+  RoomEvent.ParticipantMetadataChanged, RoomEvent.ParticipantNameChanged,
+  RoomEvent.ActiveSpeakersChanged, RoomEvent.TrackMuted, RoomEvent.TrackUnmuted,
+  RoomEvent.TrackPublished, RoomEvent.TrackUnpublished,
+  RoomEvent.LocalTrackPublished, RoomEvent.LocalTrackUnpublished,
 ];
 
 function useRoomParticipants(): Participant[] {
   const room = useRoomContext();
   const [, force] = useReducer((n: number) => n + 1, 0);
-
   useEffect(() => {
     const handler = () => force();
     PARTICIPANT_EVENTS.forEach((e) => room.on(e, handler as never));
-    return () => {
-      PARTICIPANT_EVENTS.forEach((e) => room.off(e, handler as never));
-    };
+    return () => { PARTICIPANT_EVENTS.forEach((e) => room.off(e, handler as never)); };
   }, [room]);
-
   return [room.localParticipant, ...Array.from(room.remoteParticipants.values())];
 }
 
 function useMyRole(initialRole: Role): Role {
   const room = useRoomContext();
-
-  const subscribe = useCallback(
-    (onChange: () => void) => {
+  const subscribe = useCallback((onChange: () => void) => {
       const local = room.localParticipant;
       local.on(ParticipantEvent.ParticipantMetadataChanged, onChange);
       room.on(RoomEvent.Connected, onChange);
@@ -186,15 +172,8 @@ function useMyRole(initialRole: Role): Role {
         local.off(ParticipantEvent.ParticipantMetadataChanged, onChange);
         room.off(RoomEvent.Connected, onChange);
       };
-    },
-    [room],
-  );
-
-  const getSnapshot = useCallback(
-    (): Role => parseRole(room.localParticipant.metadata) ?? initialRole,
-    [room, initialRole],
-  );
-
+    }, [room]);
+  const getSnapshot = useCallback((): Role => parseRole(room.localParticipant.metadata) ?? initialRole, [room, initialRole]);
   return useSyncExternalStore(subscribe, getSnapshot, () => initialRole);
 }
 
@@ -203,20 +182,9 @@ function useMyRole(initialRole: Role): Role {
 /* -------------------------------------------------------------------------- */
 
 function RoomContent({
-  roomId,
-  roomTitle,
-  isHost,
-  initialRole,
-  pendingRequests,
-  myPendingRequestId,
-  intentionalLeaveRef,
-  deafened,
-  onToggleDeafen,
-}: RoomAudioUIProps & {
-  intentionalLeaveRef: React.MutableRefObject<boolean>;
-  deafened: boolean;
-  onToggleDeafen: () => void;
-}) {
+  roomId, roomTitle, isHost, initialRole, pendingRequests, myPendingRequestId,
+  intentionalLeaveRef, deafened, onToggleDeafen,
+}: RoomAudioUIProps & { intentionalLeaveRef: React.MutableRefObject<boolean>; deafened: boolean; onToggleDeafen: () => void; }) {
   const router = useRouter();
   const room = useRoomContext();
   const myRole = useMyRole(initialRole);
@@ -229,7 +197,6 @@ function RoomContent({
   const [notice, setNotice] = useState<{ text: string; tone: Tone } | null>(null);
 
   const raised = hasRequested && myRole === "listener";
-
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fetchSeq = useRef(0);
   const knownIds = useRef(new Set(pendingRequests.map((r) => r.id)));
@@ -241,36 +208,22 @@ function RoomContent({
     if (noticeTimer.current) clearTimeout(noticeTimer.current);
     noticeTimer.current = setTimeout(() => setNotice(null), 3200);
   }, []);
-
-  useEffect(
-    () => () => {
-      if (noticeTimer.current) clearTimeout(noticeTimer.current);
-    },
-    [],
-  );
+  useEffect(() => () => { if (noticeTimer.current) clearTimeout(noticeTimer.current); }, []);
 
   const refetchRequests = useCallback(async () => {
     const seq = ++fetchSeq.current;
     try {
       const raw = await getSpeakerRequests(roomId);
       if (seq !== fetchSeq.current) return;
-
       const fresh = raw.filter((r) => !handledIds.current.has(r.id));
       const newcomers = fresh.filter((r) => !knownIds.current.has(r.id));
       knownIds.current = new Set(fresh.map((r) => r.id));
-
       if (newcomers.length > 0) {
-        showNotice(
-          newcomers.length === 1
-            ? `${newcomers[0].name} raised a hand ✋`
-            : `${newcomers.length} people raised their hands ✋`,
-        );
+        showNotice(newcomers.length === 1 ? `${newcomers[0].name} raised a hand ✋` : `${newcomers.length} people raised their hands ✋`);
         haptic();
       }
       setLiveRequests(fresh);
-    } catch (err) {
-      console.error("Failed to fetch requests", err);
-    }
+    } catch (err) { console.error("Failed to fetch requests", err); }
   }, [roomId, showNotice]);
 
   useEffect(() => {
@@ -278,7 +231,6 @@ function RoomContent({
     const initial = setTimeout(() => { void refetchRequests(); }, 0);
     const onBack = () => void refetchRequests();
     const onVisible = () => { if (document.visibilityState === "visible") void refetchRequests(); };
-
     room.on(RoomEvent.Connected, onBack);
     room.on(RoomEvent.Reconnected, onBack);
     document.addEventListener("visibilitychange", onVisible);
@@ -295,22 +247,12 @@ function RoomContent({
       if (topic !== ROOM_SIGNAL_TOPIC || participant) return;
       const signal = decodeRoomSignal(payload);
       if (!signal) return;
-
       switch (signal.type) {
-        case "REQUESTS_CHANGED":
-          if (isHost) void refetchRequests();
-          break;
-        case "REQUEST_APPROVED":
-        case "MOVED_TO_AUDIENCE":
-          setHasRequested(false);
-          break;
-        case "REQUEST_DECLINED":
-          setHasRequested(false);
-          showNotice("The host declined your request.");
-          break;
+        case "REQUESTS_CHANGED": if (isHost) void refetchRequests(); break;
+        case "REQUEST_APPROVED": case "MOVED_TO_AUDIENCE": setHasRequested(false); break;
+        case "REQUEST_DECLINED": setHasRequested(false); showNotice("The host declined your request."); break;
       }
     };
-
     room.on(RoomEvent.DataReceived, onData);
     return () => { room.off(RoomEvent.DataReceived, onData); };
   }, [room, isHost, refetchRequests, showNotice]);
@@ -320,20 +262,15 @@ function RoomContent({
     const onMetadata = () => {
       const next = parseRole(local.metadata);
       if (!next) return;
-
       const prev = prevRole.current;
       prevRole.current = next;
       if (prev === next) return;
-
       setHasRequested(false);
-
       if (prev === "listener" && next === "speaker") {
-        showNotice("You're now a speaker 🎤", "success");
-        haptic();
+        showNotice("You're now a speaker 🎤", "success"); haptic();
         local.setMicrophoneEnabled(true).catch(async () => {
           await sleep(700);
-          try { await local.setMicrophoneEnabled(true); } 
-          catch { showNotice("You're a speaker. Tap the mic to unmute."); }
+          try { await local.setMicrophoneEnabled(true); } catch { showNotice("You're a speaker. Tap the mic to unmute."); }
         });
       } else if (prev === "speaker" && next === "listener") {
         showNotice("You were moved to the audience.");
@@ -350,44 +287,28 @@ function RoomContent({
   }, []);
 
   useEffect(() => {
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      e.returnValue = "";
-    };
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, []);
 
   const handleLeave = () => {
-    setDialogType(null);
-    setIsPending(true);
-    intentionalLeaveRef.current = true;
+    setDialogType(null); setIsPending(true); intentionalLeaveRef.current = true;
     sessionStorage.setItem("room-toast", "You left the room.");
     room.disconnect().catch(() => {});
     leaveRoom({ roomId }).catch(console.error);
-    router.push("/rooms");
-    router.refresh();
+    router.push("/rooms"); router.refresh();
   };
 
   const handleDeleteRoom = async () => {
-    setDialogType(null);
-    setIsPending(true);
-    intentionalLeaveRef.current = true;
+    setDialogType(null); setIsPending(true); intentionalLeaveRef.current = true;
     const res = await deleteRoom({ roomId });
-    if (res.success) {
-      sessionStorage.setItem("room-toast", "You closed the room.");
-      router.push("/rooms");
-      router.refresh();
-    } else {
-      setIsPending(false);
-      intentionalLeaveRef.current = false;
-      showNotice(res.error ?? "Could not close the room.", "error");
-    }
+    if (res.success) { sessionStorage.setItem("room-toast", "You closed the room."); router.push("/rooms"); router.refresh(); } 
+    else { setIsPending(false); intentionalLeaveRef.current = false; showNotice(res.error ?? "Could not close the room.", "error"); }
   };
 
   const handleRequestSpeaker = async () => {
-    setHasRequested(true);
-    haptic();
+    setHasRequested(true); haptic();
     const res = await requestSpeaker(roomId);
     if (!res.success) { setHasRequested(false); showNotice(res.error ?? "Could not send request.", "error"); }
   };
@@ -399,32 +320,23 @@ function RoomContent({
   };
 
   const handleApproveRequest = async (req: SpeakerRequestItem, status: "APPROVED" | "DECLINED") => {
-    handledIds.current.add(req.id);
-    knownIds.current.delete(req.id);
-    setLiveRequests((prev) => prev.filter((r) => r.id !== req.id));
-    haptic();
+    handledIds.current.add(req.id); knownIds.current.delete(req.id);
+    setLiveRequests((prev) => prev.filter((r) => r.id !== req.id)); haptic();
     showNotice(status === "APPROVED" ? `${req.name} can now speak` : `Declined ${req.name}`, status === "APPROVED" ? "success" : "info");
-
     const res = await handleSpeakerRequest(req.id, status, roomId);
     if (!res.success) showNotice(res.error ?? "Could not update request.", "error");
-
-    handledIds.current.delete(req.id);
-    void refetchRequests();
+    handledIds.current.delete(req.id); void refetchRequests();
   };
 
   const handleForceMute = async () => {
-    if (!selected) return;
-    const target = selected;
-    setSelected(null);
+    if (!selected) return; const target = selected; setSelected(null);
     showNotice(`${target.name} was muted`, "success");
     const res = await muteParticipant({ roomId, participantIdentity: target.identity });
     if (!res.success) showNotice(res.error ?? "Could not mute.", "error");
   };
 
   const handleMoveToAudience = async () => {
-    if (!selected) return;
-    const target = selected;
-    setSelected(null);
+    if (!selected) return; const target = selected; setSelected(null);
     showNotice(`${target.name} moved to the audience`);
     const res = await removeFromStage({ roomId, participantIdentity: target.identity });
     if (!res.success) showNotice(res.error ?? "Could not move.", "error");
@@ -432,39 +344,32 @@ function RoomContent({
 
   return (
     <>
-      {/* Top Header */}
-      <motion.header
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, ease: "easeOut" }}
-        className="absolute inset-x-0 top-0 z-30 border-b border-border/50 bg-background/80 backdrop-blur-md"
-      >
-        <div className="mx-auto flex w-full max-w-[1400px] items-center justify-between px-6 py-4">
-          <div className="font-serif text-[24px] tracking-tight text-foreground">NARRO</div>
-          <div className="absolute left-1/2 max-w-[45%] -translate-x-1/2 truncate text-base font-medium text-foreground">
-            {roomTitle}
-          </div>
-          {isHost && (
-            <button
-              onClick={() => setDialogType("delete")}
-              disabled={isPending}
-              className="flex items-center gap-2 rounded-full bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-500 transition-colors hover:bg-red-500/20 disabled:opacity-50"
-            >
-              <Trash2 className="h-4 w-4" />
-              <span className="hidden sm:inline">Delete Room</span>
-            </button>
-          )}
-        </div>
-      </motion.header>
+      {/* ✅ MINIMAL TOP BAR - Only Delete Icon for Host */}
+      <div className="absolute inset-x-0 top-0 z-30 flex items-center justify-between px-6 py-4">
+        <div className="font-serif text-xl tracking-tight text-foreground/50">NARRO</div>
+        <div className="text-sm font-medium text-muted-foreground">{roomTitle}</div>
+        {isHost ? (
+          <button
+            onClick={() => setDialogType("delete")}
+            disabled={isPending}
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10 text-red-500 transition-colors hover:bg-red-500/20 disabled:opacity-50"
+            title="Delete Room"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        ) : (
+          <div className="w-10" /> // Spacer
+        )}
+      </div>
 
       {/* Main 3-Column Layout */}
-      <div className="mt-[73px] flex flex-1 overflow-hidden">
+      <div className="mt-14 flex flex-1 overflow-hidden">
         {/* Left Sidebar: Audience */}
         <aside className="hidden w-64 flex-col overflow-y-auto border-r border-border/50 p-4 md:flex custom-scrollbar">
           <AudienceSidebar />
         </aside>
 
-        {/* Center: Stage */}
+        {/* Center: Stage (Scrollable) */}
         <main className="relative flex flex-1 flex-col overflow-y-auto custom-scrollbar p-6">
           <RoomStage isHost={isHost} onManage={(p) => setSelected(p)} />
         </main>
@@ -490,9 +395,7 @@ function RoomContent({
           {notice && (
             <motion.div
               key={notice.text}
-              initial={{ opacity: 0, y: 8, scale: 0.96 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 8, scale: 0.96 }}
+              initial={{ opacity: 0, y: 8, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.96 }}
               role="status"
               className={cn(
                 "max-w-[min(100%-2rem,24rem)] rounded-full border px-4 py-2 text-center text-[13px] font-medium shadow-lg",
@@ -575,7 +478,7 @@ function AudienceSidebar() {
   const participants = useRoomParticipants();
   const audience = participants.map((p) => ({ p, ...parseMeta(p) })).filter((e) => e.role === "listener");
 
-  if (audience.length === 0) return null; // ✅ Hides the sidebar content when empty
+  if (audience.length === 0) return null;
 
   return (
     <>
@@ -655,25 +558,27 @@ function RoomStage({ isHost, onManage }: { isHost: boolean; onManage: (p: { iden
   const entries = participants.map((p) => ({ p, ...parseMeta(p) }));
   const stage = entries.filter((e) => e.role !== "listener").sort((a, b) => Number(b.role === "host") - Number(a.role === "host"));
 
-  // ✅ Dynamic Sizing Logic (Like Zoom/Meet)
   const count = stage.length;
-  const gridCols = count === 1 ? "grid-cols-1" : count === 2 ? "grid-cols-2" : count <= 4 ? "grid-cols-2" : "grid-cols-3";
   
-  // Smaller avatars if there are more people
+  // ✅ Smaller, tightly packed grid
+  const gridCols = count === 1 ? "grid-cols-1" : count === 2 ? "grid-cols-2" : "grid-cols-2 sm:grid-cols-3";
+  
+  // ✅ Avatars are now universally smaller
   const avatarSize = count === 1 
-    ? "h-40 w-40 sm:h-56 sm:w-56" 
+    ? "h-32 w-32 sm:h-40 sm:w-40" 
     : count === 2 
-      ? "h-32 w-32 sm:h-44 sm:w-44" 
-      : "h-24 w-24 sm:h-32 sm:w-32";
+      ? "h-24 w-24 sm:h-32 sm:w-32" 
+      : "h-20 w-20 sm:h-24 sm:w-24";
 
   return (
-    <div className="flex h-full flex-col items-center justify-center">
+    <div className="flex h-full min-h-full flex-col items-center justify-center py-6">
       {count > 0 ? (
-        <div className="flex w-full flex-col items-center gap-8">
-          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        <div className="flex w-full flex-col items-center gap-6">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
             On Stage · {count}
           </span>
-          <div className={cn("grid w-full max-w-4xl place-items-center gap-x-8 gap-y-12", gridCols)}>
+          {/* ✅ Scrollable if too many people */}
+          <div className={cn("grid w-full max-w-3xl place-items-center gap-x-6 gap-y-8", gridCols)}>
             <AnimatePresence>
               {stage.map(({ p, role, avatarUrl }) => (
                 <ParticipantTile
@@ -703,46 +608,44 @@ function ParticipantTile({ p, role, avatarUrl, avatarSize, onManage }: { p: Part
 
   return (
     <motion.div
-      initial={{ opacity: 0, scale: 0.8 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.8 }}
+      initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }}
       transition={{ type: "spring", stiffness: 200, damping: 20 }}
-      className={cn("flex flex-col items-center gap-3", onManage && "cursor-pointer")}
+      className={cn("flex flex-col items-center gap-2", onManage && "cursor-pointer")}
       onClick={onManage}
     >
       <div className="relative isolate">
-        <div className={cn("absolute -inset-2 -z-10 rounded-full border-2 transition-colors", isSpeaking ? "border-[#10B981]" : "border-[#6B4A3A]")}>
+        <div className={cn("absolute -inset-1.5 -z-10 rounded-full border-2 transition-colors", isSpeaking ? "border-[#10B981]" : "border-[#6B4A3A]")}>
           {isSpeaking && (
             <motion.div animate={{ scale: [1, 1.08, 1], opacity: [0.3, 0.7, 0.3] }} transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }} className="absolute inset-0 rounded-full border-2 border-[#10B981]" />
           )}
         </div>
 
-        <div className={cn("relative flex items-center justify-center overflow-hidden rounded-full border-[3px] shadow-sm transition-all duration-300", avatarSize, isHostRole ? "border-[#FAF9F6]" : "border-[#6B4A3A]")}>
+        <div className={cn("relative flex items-center justify-center overflow-hidden rounded-full border-2 shadow-sm transition-all duration-300", avatarSize, isHostRole ? "border-[#FAF9F6]" : "border-[#6B4A3A]")}>
           {avatarUrl ? (
             <Image src={avatarUrl} alt={name} fill sizes="(max-width: 768px) 100vw, 256px" className="object-cover" />
           ) : (
             <div className="flex h-full w-full items-center justify-center bg-[#6B4A3A] text-white">
-              <span className="font-serif text-4xl font-medium sm:text-5xl">{p.name?.[0]?.toUpperCase() ?? "?"}</span>
+              <span className="font-serif text-2xl font-medium sm:text-3xl">{p.name?.[0]?.toUpperCase() ?? "?"}</span>
             </div>
           )}
         </div>
 
         {isHostRole && (
-          <div className="absolute -bottom-2 left-1/2 z-10 flex h-7 w-7 -translate-x-1/2 items-center justify-center rounded-full border-2 border-background bg-[#6B4A3A] shadow-lg">
-            <Crown size={12} className="text-[#FAF9F6]" />
+          <div className="absolute -bottom-1.5 left-1/2 z-10 flex h-6 w-6 -translate-x-1/2 items-center justify-center rounded-full border-2 border-background bg-[#6B4A3A] shadow-lg">
+            <Crown size={10} className="text-[#FAF9F6]" />
           </div>
         )}
 
         {!isHostRole && (
-          <div className="absolute bottom-0 right-0 z-10 flex h-7 w-7 items-center justify-center rounded-full border border-border bg-background shadow-md">
-            {micOff ? <MicOff size={13} className="text-red-500" /> : <Mic size={13} className="text-[#10B981]" />}
+          <div className="absolute bottom-0 right-0 z-10 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-background shadow-md">
+            {micOff ? <MicOff size={12} className="text-red-500" /> : <Mic size={12} className="text-[#10B981]" />}
           </div>
         )}
       </div>
 
       <div className="flex flex-col items-center">
-        <span className="max-w-[120px] truncate text-sm font-medium tracking-wide text-foreground">{name}</span>
-        <span className="text-[12px] font-medium text-muted-foreground">{isHostRole ? "Host" : "Speaker"}</span>
+        <span className="max-w-[100px] truncate text-[13px] font-medium tracking-wide text-foreground">{name}</span>
+        <span className="text-[11px] font-medium text-muted-foreground">{isHostRole ? "Host" : "Speaker"}</span>
       </div>
     </motion.div>
   );
@@ -757,7 +660,6 @@ function ControlDock({ onLeave, isListener, deafened, onToggleDeafen }: { onLeav
   const [optimistic, setOptimistic] = useState<{ value: boolean; base: boolean } | null>(null);
   const busy = useRef(false);
   const clearTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   const micOn = optimistic && optimistic.base === isMicrophoneEnabled ? optimistic.value : isMicrophoneEnabled;
 
   useEffect(() => () => { if (clearTimer.current) clearTimeout(clearTimer.current); }, []);
@@ -767,7 +669,6 @@ function ControlDock({ onLeave, isListener, deafened, onToggleDeafen }: { onLeav
     busy.current = true;
     const next = !micOn;
     setOptimistic({ value: next, base: isMicrophoneEnabled });
-
     try { await localParticipant.setMicrophoneEnabled(next); } 
     catch (err) { console.error("Mic toggle failed", err); setOptimistic(null); } 
     finally {
@@ -778,17 +679,17 @@ function ControlDock({ onLeave, isListener, deafened, onToggleDeafen }: { onLeav
   };
 
   return (
-    <div className="flex items-center gap-5 rounded-full border border-black/5 bg-white/70 px-5 py-3 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-black/50 sm:gap-6 sm:px-6 sm:py-4">
-      <button onClick={toggleMic} disabled={isListener} className={cn("flex h-12 w-12 items-center justify-center rounded-full shadow-sm transition-all duration-200 active:scale-95 sm:h-14 sm:w-14", isListener ? "cursor-not-allowed bg-neutral-200 opacity-50 dark:bg-neutral-800" : !micOn ? "bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-400" : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-700")}>
-        {isListener || !micOn ? <MicOff size={22} /> : <Mic size={22} />}
+    <div className="flex items-center gap-4 sm:gap-5 rounded-full border border-black/5 bg-white/70 px-4 py-2.5 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-black/50 sm:px-5 sm:py-3">
+      <button onClick={toggleMic} disabled={isListener} className={cn("flex h-11 w-11 items-center justify-center rounded-full shadow-sm transition-all duration-200 active:scale-95 sm:h-12 sm:w-12", isListener ? "cursor-not-allowed bg-neutral-200 opacity-50 dark:bg-neutral-800" : !micOn ? "bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-400" : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-700")}>
+        {isListener || !micOn ? <MicOff size={20} /> : <Mic size={20} />}
       </button>
 
       <button onClick={onLeave} className="flex h-14 w-14 items-center justify-center rounded-full bg-[#EF4444] text-white shadow-lg transition-transform hover:scale-105 active:scale-95 sm:h-16 sm:w-16">
-        <PhoneOff size={26} />
+        <PhoneOff size={24} />
       </button>
 
-      <button onClick={onToggleDeafen} className={cn("flex h-12 w-12 items-center justify-center rounded-full shadow-sm transition-all duration-200 active:scale-95 sm:h-14 sm:w-14", deafened ? "bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-400" : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-700")}>
-        {deafened ? <VolumeX size={22} /> : <Volume2 size={22} />}
+      <button onClick={onToggleDeafen} className={cn("flex h-11 w-11 items-center justify-center rounded-full shadow-sm transition-all duration-200 active:scale-95 sm:h-12 sm:w-12", deafened ? "bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-400" : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-700")}>
+        {deafened ? <VolumeX size={20} /> : <Volume2 size={20} />}
       </button>
     </div>
   );
