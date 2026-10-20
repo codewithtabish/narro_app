@@ -1,39 +1,37 @@
 // src/app/actions/rooms/cancel-speaker-request.ts
 "use server";
 
-import { revalidateSpeakerRequests } from "@/lib/cache-keys";
-import prisma from "@/lib/clients/prisma-client";
-import { auth } from "@clerk/nextjs/server";
 import { after } from "next/server";
 
-export async function cancelSpeakerRequest(roomId: string) {
+import prisma from "@/lib/clients/prisma-client";
+import { getCurrentUser } from "@/lib/rooms/current-user.server";
+import type { ActionResult } from "@/lib/rooms/room-events";
+import { sendRoomSignal } from "@/lib/rooms/room-signals.server";
+
+export async function cancelSpeakerRequest(roomId: string): Promise<ActionResult> {
   try {
-    const { userId: clerkUserId } = await auth();
-    if (!clerkUserId) return { success: false, error: "Not authenticated." };
+    const [me, room] = await Promise.all([
+      getCurrentUser(),
+      prisma.room.findUnique({
+        where: { id: roomId },
+        select: { hostId: true, liveKitRoomName: true },
+      }),
+    ]);
+    if (!me) return { success: false, error: "Not authenticated." };
+    if (!room) return { success: false, error: "Room not found." };
 
-    const me = await prisma.user.findUnique({
-      where: { clerkUserId },
-      select: { id: true },
+    // Awaited (one fast write) so it can never run before the request's write
+    await prisma.roomSpeakerRequest.deleteMany({
+      where: { roomId, userId: me.id, status: "PENDING" },
     });
-    if (!me) return { success: false, error: "User not found." };
 
-    // ✅ 1. Instantly clear the cache so the UI removes the chair
-    revalidateSpeakerRequests(roomId);
-
-    // ✅ 2. Background delete from DB
     after(async () => {
-      try {
-        await prisma.roomSpeakerRequest.deleteMany({
-          where: { roomId, userId: me.id, status: "PENDING" },
-        });
-      } catch (err) {
-        console.error("[cancelSpeakerRequest] Background error:", err);
-      }
+      await sendRoomSignal(room.liveKitRoomName, { type: "REQUESTS_CHANGED" }, [room.hostId]);
     });
 
     return { success: true };
   } catch (err) {
     console.error("[cancelSpeakerRequest] Error:", err);
-    return { success: false, error: "Failed to cancel." };
+    return { success: false, error: "Could not cancel your request." };
   }
 }

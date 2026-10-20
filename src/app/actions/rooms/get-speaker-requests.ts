@@ -1,20 +1,25 @@
 // src/app/actions/rooms/get-speaker-requests.ts
 "use server";
 
-import { CACHE_TAGS } from "@/lib/cache-keys";
 import prisma from "@/lib/clients/prisma-client";
-import { cacheLife, cacheTag } from "next/cache";
+import { getCurrentUser } from "@/lib/rooms/current-user.server";
+import type { SpeakerRequestItem } from "@/lib/rooms/room-events";
 
-export async function getSpeakerRequests(roomId: string) {
-  "use cache";
-  cacheLife("max"); // ✅ Changed to max for instant updates
-  cacheTag(CACHE_TAGS.roomRequests(roomId));
-
+// Intentionally NOT cached: this is live, per-room data (host only).
+export async function getSpeakerRequests(roomId: string): Promise<SpeakerRequestItem[]> {
   try {
+    const [me, room] = await Promise.all([
+      getCurrentUser(),
+      prisma.room.findUnique({ where: { id: roomId }, select: { hostId: true } }),
+    ]);
+    if (!me || !room || room.hostId !== me.id) return [];
+
     const requests = await prisma.roomSpeakerRequest.findMany({
       where: { roomId, status: "PENDING" },
       include: {
-        user: { select: { id: true, name: true, imageUrl: true, profileImageUrl: true } },
+        user: {
+          select: { id: true, name: true, imageUrl: true, profileImageUrl: true },
+        },
       },
       orderBy: { createdAt: "asc" },
     });

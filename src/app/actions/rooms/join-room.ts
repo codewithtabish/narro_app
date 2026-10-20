@@ -4,12 +4,18 @@
 import { auth } from "@clerk/nextjs/server";
 import { z } from "zod";
 
-import { createLiveKitToken, listLiveKitParticipants, livekitRoomService } from "@/lib/clients/livekit-client";
+import {
+  createLiveKitToken,
+  listLiveKitParticipants,
+  livekitRoomService,
+} from "@/lib/clients/livekit-client";
 import prisma from "@/lib/clients/prisma-client";
 
 const inputSchema = z.object({
   roomId: z.string().min(1, "roomId is required"),
 });
+
+type LiveKitParticipants = Awaited<ReturnType<typeof listLiveKitParticipants>>;
 
 export async function joinRoom(input: z.infer<typeof inputSchema>) {
   try {
@@ -38,20 +44,24 @@ export async function joinRoom(input: z.infer<typeof inputSchema>) {
     const liveKitUrl = process.env.LIVEKIT_URL;
     if (!liveKitUrl) return { success: false, error: "LiveKit not configured." };
 
-    // Ghost session cleanup
-    try {
-      const activeParticipants = await listLiveKitParticipants(room.liveKitRoomName);
-      const isAlreadyConnected = activeParticipants.some((p) => p.identity === me.id);
-      if (isAlreadyConnected) {
+    // Both lookups at the same time
+    const [activeParticipants, speakerRequest] = await Promise.all([
+      listLiveKitParticipants(room.liveKitRoomName).catch((): LiveKitParticipants => []),
+      prisma.roomSpeakerRequest.findUnique({
+        where: { roomId_userId: { roomId, userId: me.id } },
+        select: { status: true },
+      }),
+    ]);
+
+    // Ghost session cleanup (only costs time if already connected elsewhere)
+    if (activeParticipants.some((p) => p.identity === me.id)) {
+      try {
         await livekitRoomService.removeParticipant(room.liveKitRoomName, me.id);
         await new Promise((resolve) => setTimeout(resolve, 600));
-      }
-    } catch {}
+      } catch {}
+    }
 
     const isHost = room.hostId === me.id;
-    const speakerRequest = await prisma.roomSpeakerRequest.findUnique({
-      where: { roomId_userId: { roomId, userId: me.id } },
-    });
     const isSpeaker = isHost || speakerRequest?.status === "APPROVED";
     const role = isHost ? "host" : isSpeaker ? "speaker" : "listener";
     const avatarUrl = me.profileImageUrl ?? me.imageUrl ?? null;
@@ -63,8 +73,6 @@ export async function joinRoom(input: z.infer<typeof inputSchema>) {
       metadata: JSON.stringify({ avatarUrl, role }),
       ttl: 60 * 60,
     });
-
-    // ❌ REMOVED: after(() => revalidateSingleRoom(roomId));
 
     return { success: true, token, liveKitUrl, roomName: room.liveKitRoomName };
   } catch (err) {

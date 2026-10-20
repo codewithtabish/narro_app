@@ -1,85 +1,75 @@
 // src/app/actions/rooms/remove-from-stage.ts
 "use server";
 
-import { auth } from "@clerk/nextjs/server";
 import { after } from "next/server";
 import { z } from "zod";
 
-import { revalidateSingleRoom, revalidateSpeakerRequests } from "@/lib/cache-keys";
-import { livekitRoomService } from "@/lib/clients/livekit-client";
 import prisma from "@/lib/clients/prisma-client";
+import { getCurrentUser } from "@/lib/rooms/current-user.server";
+import type { ActionResult } from "@/lib/rooms/room-events";
+import {
+  muteMicrophone,
+  retry,
+  sendRoomSignal,
+  setParticipantRole,
+} from "@/lib/rooms/room-signals.server";
 
 const inputSchema = z.object({
   roomId: z.string().min(1),
   participantIdentity: z.string().min(1),
 });
 
-export async function removeFromStage(input: z.infer<typeof inputSchema>) {
+export async function removeFromStage(
+  input: z.infer<typeof inputSchema>,
+): Promise<ActionResult> {
   try {
-    const { userId: clerkUserId } = await auth();
-    if (!clerkUserId) return { success: false, error: "Not authenticated." };
+    const parsed = inputSchema.safeParse(input);
+    if (!parsed.success) return { success: false, error: "Invalid request." };
+    const { roomId, participantIdentity } = parsed.data;
 
-    const { roomId, participantIdentity } = inputSchema.parse(input);
-
-    const me = await prisma.user.findUnique({
-      where: { clerkUserId },
-      select: { id: true },
-    });
-    if (!me) return { success: false, error: "User not found." };
-
-    const room = await prisma.room.findUnique({
-      where: { id: roomId },
-      select: { hostId: true, liveKitRoomName: true },
-    });
-    if (room?.hostId !== me.id) {
+    const [me, room] = await Promise.all([
+      getCurrentUser(),
+      prisma.room.findUnique({
+        where: { id: roomId },
+        select: { hostId: true, liveKitRoomName: true },
+      }),
+    ]);
+    if (!me) return { success: false, error: "Not authenticated." };
+    if (!room || room.hostId !== me.id) {
       return { success: false, error: "Only the host can remove speakers." };
     }
+    if (participantIdentity === room.hostId) {
+      return { success: false, error: "The host cannot be moved." };
+    }
 
-    // ✅ 1. Instantly update UI
-    revalidateSpeakerRequests(roomId);
-    revalidateSingleRoom(roomId);
+    // Awaited: a rejoin must come back as a listener, so the DB has to be right first
+    await prisma.roomSpeakerRequest.updateMany({
+      where: { roomId, userId: participantIdentity },
+      data: { status: "DECLINED" },
+    });
 
-    // ✅ 2. Background LiveKit Mute, Metadata Update & DB Update
+    // Background: mute, revoke publish permission, notify. Each step is isolated.
     after(async () => {
       try {
-        // 1. Get the existing metadata of the user
-        const participant = await livekitRoomService.getParticipant(
-          room.liveKitRoomName,
-          participantIdentity
-        );
-        
-        let currentMeta = {};
-        try {
-          if (participant?.metadata) currentMeta = JSON.parse(participant.metadata);
-        } catch {}
-
-        // 2. Update LiveKit: Mute the mic AND change role to listener
-        await livekitRoomService.mutePublishedTrack(
-          room.liveKitRoomName,
-          participantIdentity,
-          "microphone",
-          true
-        );
-
-        await livekitRoomService.updateParticipant(
-          room.liveKitRoomName,
-          participantIdentity,
-          JSON.stringify({ ...currentMeta, role: "listener" }) // ✅ Force role change
-        );
-
-        // 3. Update DB
-        await prisma.roomSpeakerRequest.updateMany({
-          where: { roomId, userId: participantIdentity },
-          data: { status: "DECLINED" },
-        });
+        await muteMicrophone(room.liveKitRoomName, participantIdentity);
       } catch (err) {
-        console.error("[removeFromStage] Background error:", err);
+        console.warn("[removeFromStage] mute failed:", err);
       }
+      try {
+        await retry(() =>
+          setParticipantRole(room.liveKitRoomName, participantIdentity, "listener"),
+        );
+      } catch (err) {
+        console.error("[removeFromStage] demote failed:", err);
+      }
+      await sendRoomSignal(room.liveKitRoomName, { type: "MOVED_TO_AUDIENCE" }, [
+        participantIdentity,
+      ]);
     });
 
     return { success: true };
   } catch (err) {
     console.error("[removeFromStage] Error:", err);
-    return { success: false, error: "Failed to remove from stage." };
+    return { success: false, error: "Could not move this person." };
   }
 }

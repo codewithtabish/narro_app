@@ -38,7 +38,6 @@ export async function createRoom(
     if (!parsed.success) {
       return { success: false, error: parsed.error.issues[0].message };
     }
-
     const data = parsed.data;
 
     const host = await prisma.user.findUnique({
@@ -47,7 +46,7 @@ export async function createRoom(
     });
     if (!host) return { success: false, error: "User not found." };
 
-    // 1. Create DB Room (temp name)
+    // 1. DB room (unique temp LiveKit name, safe even with a unique constraint)
     const room = await prisma.room.create({
       data: {
         hostId: host.id,
@@ -56,14 +55,14 @@ export async function createRoom(
         language: data.language,
         visibility: data.visibility,
         maxParticipants: data.maxParticipants,
-        liveKitRoomName: `pending-${Date.now()}`,
+        liveKitRoomName: `pending-${crypto.randomUUID()}`,
         status: "OPEN",
       },
     });
 
     const liveKitRoomName = generateCallRoomName(room.id);
 
-    // 2. Create LiveKit Room
+    // 2. LiveKit room
     try {
       await createLiveKitRoom({
         name: liveKitRoomName,
@@ -76,24 +75,28 @@ export async function createRoom(
       return { success: false, error: "Failed to create audio room." };
     }
 
-    // 3. Update room with real LiveKit name
+    // 3. Save the real LiveKit name
     await prisma.room.update({
       where: { id: room.id },
       data: { liveKitRoomName },
     });
 
-    // 4. Background: Push Notifications & Revalidate
-    after(async () => {
-      // Notify all users (Web + Mobile)
-      await sendGlobalRoomPush({
-        roomId: room.id,
-        title: room.title,
-        hostName: host.name,
-        language: room.language,
-      });
+    // 4. Revalidate NOW (after the final DB write, before returning),
+    //    so the host never lands on a list that is missing the new room.
+    revalidateRooms();
 
-      // Revalidate cache
-      revalidateRooms();
+    // 5. Background: push notifications (slow, must never block the host)
+    after(async () => {
+      try {
+        await sendGlobalRoomPush({
+          roomId: room.id,
+          title: room.title,
+          hostName: host.name,
+          language: room.language,
+        });
+      } catch (err) {
+        console.error("[createRoom] Push failed:", err);
+      }
     });
 
     return { success: true, roomId: room.id };

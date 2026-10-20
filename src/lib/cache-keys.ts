@@ -1,4 +1,4 @@
-// src/lib/cache-key.ts
+// src/lib/cache-keys.ts
 // ============================================================
 // CENTRAL CACHE TAGS — NARRO
 // Used with `use cache` + `revalidateTag`
@@ -15,7 +15,7 @@ export const CACHE_TAGS = {
   // ── Users ──
   users: "users",
   user: (clerkId: string) => `user:${clerkId}`,
-  
+
   // ── Receiver profile (/community/[id]) ──
   receiverUser: (clerkId: string) => `receiver-user:${clerkId}`,
 
@@ -27,13 +27,16 @@ export const CACHE_TAGS = {
   homepageRooms: "homepage-rooms",
 
   // ── PUBLIC DIRECTORY PAGES ──
-  communityDirectory: "community-directory", 
+  communityDirectory: "community-directory",
 
   // ── ROOMS ──
   rooms: "rooms",
   room: (roomId: string) => `room:${roomId}`,
-  
-  // ✅ NEW: Speaker Requests Tag
+
+  /**
+   * @deprecated Speaker requests are live data now (real-time via LiveKit,
+   * never cached). Kept only so old imports don't break the build.
+   */
   roomRequests: (roomId: string) => `room-requests:${roomId}`,
 } as const;
 
@@ -47,6 +50,7 @@ const NOW = { expire: 0 } as const;
 // ROOMS
 // ─────────────────────────────────────────────
 
+/** Call after a room is CREATED or DELETED (the public list changes). */
 export function revalidateRooms() {
   revalidateTag(CACHE_TAGS.rooms, NOW);
   revalidateTag(CACHE_TAGS.homepageRooms, NOW);
@@ -54,22 +58,26 @@ export function revalidateRooms() {
   revalidatePath("/rooms");
 }
 
+/**
+ * Call when a single room's snapshot changes (someone left, etc.).
+ *
+ * ⚠️ It deliberately does NOT revalidate `/rooms/active/[id]`.
+ * Revalidating the page a user is sitting in re-renders it with new props
+ * (a fresh LiveKit token) and makes <LiveKitRoom> reconnect.
+ */
 export function revalidateSingleRoom(roomId: string) {
   revalidateTag(CACHE_TAGS.room(roomId), NOW);
-  revalidateTag(CACHE_TAGS.rooms, NOW); 
-  // ✅ Also revalidate the requests for this room
-  revalidateTag(CACHE_TAGS.roomRequests(roomId), NOW);
-  revalidatePath(`/rooms/active/${roomId}`); 
+  revalidateTag(CACHE_TAGS.rooms, NOW);
+  revalidateTag(CACHE_TAGS.homepageRooms, NOW);
   revalidatePath("/rooms");
 }
 
 /**
- * ✅ NEW: Revalidate ONLY the speaker requests for a specific room.
- * Call after: A user raises their hand, cancels, or the host approves/declines.
+ * @deprecated No-op. Speaker requests are no longer cached or revalidated;
+ * the host gets them in real time through the LiveKit data channel.
  */
-export function revalidateSpeakerRequests(roomId: string) {
-  revalidateTag(CACHE_TAGS.roomRequests(roomId), NOW);
-  revalidatePath(`/rooms/active/${roomId}`);
+export function revalidateSpeakerRequests(_roomId: string) {
+  // intentionally empty
 }
 
 // ─────────────────────────────────────────────
@@ -99,8 +107,8 @@ export function revalidateUser(clerkId: string) {
   revalidateTag(CACHE_TAGS.user(clerkId), NOW);
   revalidateTag(CACHE_TAGS.receiverUser(clerkId), NOW);
   revalidateTag(CACHE_TAGS.users, NOW);
-  
-  revalidateHomepagePreviews(); 
+
+  revalidateHomepagePreviews();
   revalidateCommunityDirectory();
 
   revalidatePath("/app");
@@ -111,7 +119,7 @@ export function revalidateUser(clerkId: string) {
 
 export function revalidateUsers() {
   revalidateTag(CACHE_TAGS.users, NOW);
-  revalidateHomepagePreviews(); 
+  revalidateHomepagePreviews();
   revalidateCommunityDirectory();
   revalidatePath("/app");
   revalidatePath("/app", "layout");
