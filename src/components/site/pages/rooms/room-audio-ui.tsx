@@ -23,7 +23,7 @@ import { leaveRoom } from "@/app/actions/rooms/leave-room";
 import { muteParticipant } from "@/app/actions/rooms/mute-participant";
 import { removeFromStage } from "@/app/actions/rooms/remove-from-stage";
 import { requestSpeaker } from "@/app/actions/rooms/request-speaker";
-import { useSpeakerRequests } from "@/hooks/use-speaker-requests"; // ✅ Bring back the hook
+import { useSpeakerRequests } from "@/hooks/use-speaker-requests";
 import { cn } from "@/lib/utils";
 
 interface RoomAudioUIProps {
@@ -48,7 +48,7 @@ export function RoomAudioUI({
   
   const intentionalLeaveRef = useRef(false);
 
-  // ✅ THE FIX: Bring back the polling hook so the Host sees the guest's chair
+  // ✅ Polling hook (safe now)
   useSpeakerRequests(isHost);
 
   // Lock page scroll
@@ -73,7 +73,7 @@ export function RoomAudioUI({
   const handleLeave = () => {
     setDialogType(null);
     setIsPending(true);
-    intentionalLeaveRef.current = true; 
+    intentionalLeaveRef.current = true;
     
     sessionStorage.setItem("room-toast", "You left the room.");
     leaveRoom({ roomId }).catch(console.error);
@@ -84,7 +84,7 @@ export function RoomAudioUI({
   const handleDeleteRoom = async () => {
     setDialogType(null);
     setIsPending(true);
-    intentionalLeaveRef.current = true; 
+    intentionalLeaveRef.current = true;
     
     const res = await deleteRoom({ roomId });
     if (res.success) {
@@ -117,21 +117,23 @@ export function RoomAudioUI({
 
   return (
     <>
+      {/* ✅ Use a stable key so React never unmounts the LiveKitRoom */}
       <LiveKitRoom
+        key={`room-${roomId}`}
         token={token}
         serverUrl={serverUrl}
         connect={true}
         audio={initialRole !== "listener"}
         video={false}
         onDisconnected={handleDisconnected}
-        className="fixed inset-0 z-9999 flex h-dvh w-screen flex-col overflow-hidden bg-background text-foreground"
+        className="fixed inset-0 z-[9999] flex h-[100dvh] w-screen flex-col overflow-hidden bg-background text-foreground"
       >
         {/* Top Header */}
         <motion.header 
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, ease: "easeOut" }}
-          className="absolute top-0 left-0 right-0 z-20 flex w-full items-center justify-between px-6 py-6 sm:px-10 bg-linear-to-b from-background to-transparent"
+          className="absolute top-0 left-0 right-0 z-20 flex w-full items-center justify-between px-6 py-6 sm:px-10 bg-gradient-to-b from-background to-transparent"
         >
           <div className="font-serif text-[24px] sm:text-[28px] tracking-tight text-foreground">NARRO</div>
           <div className="absolute left-1/2 -translate-x-1/2 text-base sm:text-xl font-medium text-foreground">
@@ -230,7 +232,7 @@ export function RoomAudioUI({
           initial={{ opacity: 0, y: 40 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.2, ease: "easeOut" }}
-          className="absolute bottom-0 left-0 right-0 z-20 flex flex-col items-center gap-4 bg-linear-to-t from-background via-background/90 to-transparent pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-12"
+          className="absolute bottom-0 left-0 right-0 z-20 flex flex-col items-center gap-4 bg-gradient-to-t from-background via-background/90 to-transparent pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-12"
         >
           {initialRole === "listener" && !hasRequested && (
             <button
@@ -253,7 +255,7 @@ export function RoomAudioUI({
       {/* Host Moderation Dialog */}
       <AnimatePresence>
         {selectedParticipant && (
-          <div className="fixed inset-0 z-10000 flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -304,7 +306,7 @@ export function RoomAudioUI({
       {/* Leave / Delete Dialog */}
       <AnimatePresence>
         {dialogType && (
-          <div className="fixed inset-0 z-10000 flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -402,7 +404,7 @@ function AudioGrid({ isHost, onSelectParticipant }: { isHost: boolean; onSelectP
                     initial={{ opacity: 0, scale: 0.8 }}
                     animate={{ opacity: 1, scale: 1 }}
                     className={cn(
-                      "absolute -inset-2 rounded-full border-2",
+                      "absolute -inset-2 rounded-full border-[2px]",
                       isSpeaking ? "border-[#10B981]" : "border-[#6B4A3A]" 
                     )}
                     style={{ zIndex: -1 }}
@@ -411,7 +413,7 @@ function AudioGrid({ isHost, onSelectParticipant }: { isHost: boolean; onSelectP
                        <motion.div 
                          animate={{ scale: [1, 1.05, 1], opacity: [0.3, 0.6, 0.3] }}
                          transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-                         className="absolute inset-0 rounded-full border-2 border-[#10B981]"
+                         className="absolute inset-0 rounded-full border-[2px] border-[#10B981]"
                        />
                      )}
                   </motion.div>
