@@ -5,13 +5,14 @@ import { auth } from "@clerk/nextjs/server";
 import { after } from "next/server";
 import { z } from "zod";
 
-import { revalidateRooms, revalidateUserRoom } from "@/lib/cache-keys"; // ✅ Import revalidateUserRoom
+import { revalidateRooms, revalidateUserRoom } from "@/lib/cache-keys";
 import {
   createLiveKitRoom,
   generateCallRoomName,
 } from "@/lib/clients/livekit-client";
 import prisma from "@/lib/clients/prisma-client";
 import { sendGlobalRoomPush } from "@/lib/push/send-global-room-push";
+import { checkActiveRoom } from "./check-active-room"; // ✅ Import the check
 
 const inputSchema = z.object({
   title: z.string().min(3, "Title must be at least 3 characters"),
@@ -83,11 +84,14 @@ export async function createRoom(
 
     // 4. Revalidate NOW (after the final DB write, before returning)
     revalidateRooms();
-    revalidateUserRoom(clerkUserId); // ✅ Revalidate the userRoom cache so the button changes to "Resume Room"
+    revalidateUserRoom(clerkUserId); // Clears the cache so the button updates
 
-    // 5. Background: push notifications (slow, must never block the host)
+    // 5. Background: warm the cache & send push notifications
     after(async () => {
       try {
+        // ✅ Warm the active room cache so the UI instantly shows "Resume Room"
+        await checkActiveRoom();
+
         await sendGlobalRoomPush({
           roomId: room.id,
           title: room.title,
@@ -95,7 +99,7 @@ export async function createRoom(
           language: room.language,
         });
       } catch (err) {
-        console.error("[createRoom] Push failed:", err);
+        console.error("[createRoom] Background task failed:", err);
       }
     });
 
