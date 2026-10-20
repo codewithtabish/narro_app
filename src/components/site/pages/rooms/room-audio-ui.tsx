@@ -182,7 +182,7 @@ function useMyRole(initialRole: Role): Role {
 /* -------------------------------------------------------------------------- */
 
 function RoomContent({
-  roomId, roomTitle, isHost, initialRole, pendingRequests, myPendingRequestId,
+  roomId, isHost, initialRole, pendingRequests, myPendingRequestId,
   intentionalLeaveRef, deafened, onToggleDeafen,
 }: RoomAudioUIProps & { intentionalLeaveRef: React.MutableRefObject<boolean>; deafened: boolean; onToggleDeafen: () => void; }) {
   const router = useRouter();
@@ -344,37 +344,34 @@ function RoomContent({
 
   return (
     <>
-      {/* ✅ MINIMAL TOP BAR - Only Delete Icon for Host */}
-      <div className="absolute inset-x-0 top-0 z-30 flex items-center justify-between px-6 py-4">
-        <div className="font-serif text-xl tracking-tight text-foreground/50">NARRO</div>
-        <div className="text-sm font-medium text-muted-foreground">{roomTitle}</div>
-        {isHost ? (
+      {/* ✅ TOP HEADER (Delete Icon ONLY) */}
+      {isHost && (
+        <div className="absolute right-6 top-6 z-30">
           <button
             onClick={() => setDialogType("delete")}
             disabled={isPending}
             className="flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10 text-red-500 transition-colors hover:bg-red-500/20 disabled:opacity-50"
             title="Delete Room"
           >
-            <Trash2 className="h-4 w-4" />
+            <Trash2 className="h-5 w-5" />
           </button>
-        ) : (
-          <div className="w-10" /> // Spacer
-        )}
-      </div>
+        </div>
+      )}
 
-      {/* Main 3-Column Layout */}
-      <div className="mt-14 flex flex-1 overflow-hidden">
-        {/* Left Sidebar: Audience */}
+      {/* Main Layout */}
+      <div className="flex flex-1 flex-col overflow-hidden md:flex-row">
+        
+        {/* Left Sidebar: Audience (Desktop Only) */}
         <aside className="hidden w-64 flex-col overflow-y-auto border-r border-border/50 p-4 md:flex custom-scrollbar">
           <AudienceSidebar />
         </aside>
 
-        {/* Center: Stage (Scrollable) */}
-        <main className="relative flex flex-1 flex-col overflow-y-auto custom-scrollbar p-6">
+        {/* Center: Stage */}
+        <main className="relative flex flex-1 flex-col overflow-y-auto custom-scrollbar p-6 pt-16 md:pt-6">
           <RoomStage isHost={isHost} onManage={(p) => setSelected(p)} />
         </main>
 
-        {/* Right Sidebar: Requests */}
+        {/* Right Sidebar: Requests (Desktop Only) */}
         <aside className="hidden w-72 flex-col overflow-y-auto border-l border-border/50 p-4 lg:flex custom-scrollbar">
           {isHost ? (
             <RequestsSidebar requests={liveRequests} onApprove={handleApproveRequest} />
@@ -382,6 +379,40 @@ function RoomContent({
             <MyRequestSidebar raised={raised} onCancel={handleCancelRequest} />
           )}
         </aside>
+      </div>
+
+      {/* ✅ Mobile Drawer/Row for Requests & Audience */}
+      <div className="flex flex-col gap-4 px-4 pb-32 md:hidden">
+        {isHost && liveRequests.length > 0 && (
+          <div className="mt-4">
+             <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-[#6B4A3A]">
+              Requests · {liveRequests.length}
+            </div>
+            <div className="flex gap-2 overflow-x-auto pb-2">
+              {liveRequests.map((req) => (
+                <div key={req.id} className="flex shrink-0 items-center gap-2 rounded-xl border border-border bg-card p-2 shadow-sm">
+                  <div className="relative h-8 w-8 shrink-0 overflow-hidden rounded-full bg-muted">
+                    {req.avatarUrl ? <Image src={req.avatarUrl} alt={req.name} fill className="object-cover" /> : <div className="flex h-full w-full items-center justify-center bg-[#6B4A3A] text-xs text-white">{req.name[0]?.toUpperCase()}</div>}
+                  </div>
+                  <span className="max-w-[80px] truncate text-xs font-medium text-foreground">{req.name}</span>
+                  <div className="flex gap-1">
+                    <button onClick={() => handleApproveRequest(req, "DECLINED")} className="flex h-6 w-6 items-center justify-center rounded-full bg-red-500/10 text-red-500"><X size={12} /></button>
+                    <button onClick={() => handleApproveRequest(req, "APPROVED")} className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500"><Check size={12} /></button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {!isHost && raised && (
+          <div className="mt-4 flex items-center justify-between rounded-xl border border-[#6B4A3A]/30 bg-[#6B4A3A]/5 p-3">
+            <div className="flex items-center gap-2">
+               <Hand className="h-4 w-4 text-[#6B4A3A]" />
+               <span className="text-sm font-medium text-[#6B4A3A]">Hand raised</span>
+            </div>
+            <button onClick={handleCancelRequest} className="rounded-full bg-red-500/10 px-3 py-1 text-xs font-semibold text-red-500">Cancel</button>
+          </div>
+        )}
       </div>
 
       {/* Bottom Dock & Notices */}
@@ -478,7 +509,7 @@ function AudienceSidebar() {
   const participants = useRoomParticipants();
   const audience = participants.map((p) => ({ p, ...parseMeta(p) })).filter((e) => e.role === "listener");
 
-  if (audience.length === 0) return null;
+  if (audience.length === 0) return null; // ✅ Removes "Audience · 0"
 
   return (
     <>
@@ -503,38 +534,32 @@ function AudienceSidebar() {
 }
 
 function RequestsSidebar({ requests, onApprove }: { requests: SpeakerRequestItem[]; onApprove: (req: SpeakerRequestItem, status: "APPROVED" | "DECLINED") => void; }) {
+  if (requests.length === 0) return null; // ✅ Removes "Speaker Requests · 0"
+
   return (
     <>
       <div className="mb-4 text-xs font-semibold uppercase tracking-wider text-[#6B4A3A]">
         Speaker Requests · {requests.length}
       </div>
-      {requests.length === 0 ? (
-        <div className="mt-10 flex flex-col items-center text-center text-muted-foreground">
-          <Hand className="mb-2 h-8 w-8 opacity-20" />
-          <p className="text-sm font-medium text-foreground">No requests right now</p>
-          <p className="mt-1 text-xs">When someone wants to speak, they&apos;ll appear here.</p>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-3">
-          {requests.map((req) => (
-            <motion.div key={req.id} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="flex items-center justify-between rounded-xl border border-border bg-card p-3 shadow-sm">
-              <div className="flex items-center gap-3">
-                <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full bg-muted">
-                  {req.avatarUrl ? <Image src={req.avatarUrl} alt={req.name} fill className="object-cover" /> : <div className="flex h-full w-full items-center justify-center bg-[#6B4A3A] text-sm text-white">{req.name[0]?.toUpperCase()}</div>}
-                </div>
-                <div className="flex flex-col">
-                  <span className="max-w-[100px] truncate text-sm font-medium text-foreground">{req.name}</span>
-                  <span className="text-[11px] text-muted-foreground">Wants to speak</span>
-                </div>
+      <div className="flex flex-col gap-3">
+        {requests.map((req) => (
+          <motion.div key={req.id} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="flex items-center justify-between rounded-xl border border-border bg-card p-3 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full bg-muted">
+                {req.avatarUrl ? <Image src={req.avatarUrl} alt={req.name} fill className="object-cover" /> : <div className="flex h-full w-full items-center justify-center bg-[#6B4A3A] text-sm text-white">{req.name[0]?.toUpperCase()}</div>}
               </div>
-              <div className="flex gap-1.5">
-                <button onClick={() => onApprove(req, "DECLINED")} className="flex h-8 w-8 items-center justify-center rounded-full bg-red-500/10 text-red-500 hover:bg-red-500/20 active:scale-95"><X size={16} /></button>
-                <button onClick={() => onApprove(req, "APPROVED")} className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 active:scale-95"><Check size={16} /></button>
+              <div className="flex flex-col">
+                <span className="max-w-[100px] truncate text-sm font-medium text-foreground">{req.name}</span>
+                <span className="text-[11px] text-muted-foreground">Wants to speak</span>
               </div>
-            </motion.div>
-          ))}
-        </div>
-      )}
+            </div>
+            <div className="flex gap-1.5">
+              <button onClick={() => onApprove(req, "DECLINED")} className="flex h-8 w-8 items-center justify-center rounded-full bg-red-500/10 text-red-500 hover:bg-red-500/20 active:scale-95"><X size={16} /></button>
+              <button onClick={() => onApprove(req, "APPROVED")} className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 active:scale-95"><Check size={16} /></button>
+            </div>
+          </motion.div>
+        ))}
+      </div>
     </>
   );
 }
@@ -559,16 +584,8 @@ function RoomStage({ isHost, onManage }: { isHost: boolean; onManage: (p: { iden
   const stage = entries.filter((e) => e.role !== "listener").sort((a, b) => Number(b.role === "host") - Number(a.role === "host"));
 
   const count = stage.length;
-  
-  // ✅ Smaller, tightly packed grid
   const gridCols = count === 1 ? "grid-cols-1" : count === 2 ? "grid-cols-2" : "grid-cols-2 sm:grid-cols-3";
-  
-  // ✅ Avatars are now universally smaller
-  const avatarSize = count === 1 
-    ? "h-32 w-32 sm:h-40 sm:w-40" 
-    : count === 2 
-      ? "h-24 w-24 sm:h-32 sm:w-32" 
-      : "h-20 w-20 sm:h-24 sm:w-24";
+  const avatarSize = count === 1 ? "h-32 w-32 sm:h-40 sm:w-40" : count === 2 ? "h-24 w-24 sm:h-32 sm:w-32" : "h-20 w-20 sm:h-24 sm:w-24";
 
   return (
     <div className="flex h-full min-h-full flex-col items-center justify-center py-6">
@@ -577,18 +594,10 @@ function RoomStage({ isHost, onManage }: { isHost: boolean; onManage: (p: { iden
           <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
             On Stage · {count}
           </span>
-          {/* ✅ Scrollable if too many people */}
           <div className={cn("grid w-full max-w-3xl place-items-center gap-x-6 gap-y-8", gridCols)}>
             <AnimatePresence>
               {stage.map(({ p, role, avatarUrl }) => (
-                <ParticipantTile
-                  key={p.identity}
-                  p={p}
-                  role={role}
-                  avatarUrl={avatarUrl}
-                  avatarSize={avatarSize}
-                  onManage={isHost && !p.isLocal ? () => onManage({ identity: p.identity, name: p.name || "User", role }) : undefined}
-                />
+                <ParticipantTile key={p.identity} p={p} role={role} avatarUrl={avatarUrl} avatarSize={avatarSize} onManage={isHost && !p.isLocal ? () => onManage({ identity: p.identity, name: p.name || "User", role }) : undefined} />
               ))}
             </AnimatePresence>
           </div>
@@ -607,42 +616,17 @@ function ParticipantTile({ p, role, avatarUrl, avatarSize, onManage }: { p: Part
   const name = p.isLocal ? "You" : p.name || "Guest";
 
   return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }}
-      transition={{ type: "spring", stiffness: 200, damping: 20 }}
-      className={cn("flex flex-col items-center gap-2", onManage && "cursor-pointer")}
-      onClick={onManage}
-    >
+    <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }} transition={{ type: "spring", stiffness: 200, damping: 20 }} className={cn("flex flex-col items-center gap-2", onManage && "cursor-pointer")} onClick={onManage}>
       <div className="relative isolate">
         <div className={cn("absolute -inset-1.5 -z-10 rounded-full border-2 transition-colors", isSpeaking ? "border-[#10B981]" : "border-[#6B4A3A]")}>
-          {isSpeaking && (
-            <motion.div animate={{ scale: [1, 1.08, 1], opacity: [0.3, 0.7, 0.3] }} transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }} className="absolute inset-0 rounded-full border-2 border-[#10B981]" />
-          )}
+          {isSpeaking && <motion.div animate={{ scale: [1, 1.08, 1], opacity: [0.3, 0.7, 0.3] }} transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }} className="absolute inset-0 rounded-full border-2 border-[#10B981]" />}
         </div>
-
         <div className={cn("relative flex items-center justify-center overflow-hidden rounded-full border-2 shadow-sm transition-all duration-300", avatarSize, isHostRole ? "border-[#FAF9F6]" : "border-[#6B4A3A]")}>
-          {avatarUrl ? (
-            <Image src={avatarUrl} alt={name} fill sizes="(max-width: 768px) 100vw, 256px" className="object-cover" />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center bg-[#6B4A3A] text-white">
-              <span className="font-serif text-2xl font-medium sm:text-3xl">{p.name?.[0]?.toUpperCase() ?? "?"}</span>
-            </div>
-          )}
+          {avatarUrl ? <Image src={avatarUrl} alt={name} fill sizes="(max-width: 768px) 100vw, 256px" className="object-cover" /> : <div className="flex h-full w-full items-center justify-center bg-[#6B4A3A] text-white"><span className="font-serif text-2xl font-medium sm:text-3xl">{p.name?.[0]?.toUpperCase() ?? "?"}</span></div>}
         </div>
-
-        {isHostRole && (
-          <div className="absolute -bottom-1.5 left-1/2 z-10 flex h-6 w-6 -translate-x-1/2 items-center justify-center rounded-full border-2 border-background bg-[#6B4A3A] shadow-lg">
-            <Crown size={10} className="text-[#FAF9F6]" />
-          </div>
-        )}
-
-        {!isHostRole && (
-          <div className="absolute bottom-0 right-0 z-10 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-background shadow-md">
-            {micOff ? <MicOff size={12} className="text-red-500" /> : <Mic size={12} className="text-[#10B981]" />}
-          </div>
-        )}
+        {isHostRole && <div className="absolute -bottom-1.5 left-1/2 z-10 flex h-6 w-6 -translate-x-1/2 items-center justify-center rounded-full border-2 border-background bg-[#6B4A3A] shadow-lg"><Crown size={10} className="text-[#FAF9F6]" /></div>}
+        {!isHostRole && <div className="absolute bottom-0 right-0 z-10 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-background shadow-md">{micOff ? <MicOff size={12} className="text-red-500" /> : <Mic size={12} className="text-[#10B981]" />}</div>}
       </div>
-
       <div className="flex flex-col items-center">
         <span className="max-w-[100px] truncate text-[13px] font-medium tracking-wide text-foreground">{name}</span>
         <span className="text-[11px] font-medium text-muted-foreground">{isHostRole ? "Host" : "Speaker"}</span>
@@ -683,11 +667,9 @@ function ControlDock({ onLeave, isListener, deafened, onToggleDeafen }: { onLeav
       <button onClick={toggleMic} disabled={isListener} className={cn("flex h-11 w-11 items-center justify-center rounded-full shadow-sm transition-all duration-200 active:scale-95 sm:h-12 sm:w-12", isListener ? "cursor-not-allowed bg-neutral-200 opacity-50 dark:bg-neutral-800" : !micOn ? "bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-400" : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-700")}>
         {isListener || !micOn ? <MicOff size={20} /> : <Mic size={20} />}
       </button>
-
       <button onClick={onLeave} className="flex h-14 w-14 items-center justify-center rounded-full bg-[#EF4444] text-white shadow-lg transition-transform hover:scale-105 active:scale-95 sm:h-16 sm:w-16">
         <PhoneOff size={24} />
       </button>
-
       <button onClick={onToggleDeafen} className={cn("flex h-11 w-11 items-center justify-center rounded-full shadow-sm transition-all duration-200 active:scale-95 sm:h-12 sm:w-12", deafened ? "bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-400" : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-700")}>
         {deafened ? <VolumeX size={20} /> : <Volume2 size={20} />}
       </button>
