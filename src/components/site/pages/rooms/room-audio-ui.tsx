@@ -19,7 +19,7 @@ import { useEffect, useRef, useState } from "react";
 import { handleSpeakerRequest } from "@/app/actions/rooms/approve-speaker";
 import { cancelSpeakerRequest } from "@/app/actions/rooms/cancel-speaker-request";
 import { deleteRoom } from "@/app/actions/rooms/delete-room";
-import { getSpeakerRequests } from "@/app/actions/rooms/get-speaker-requests"; // ✅ Import the read action
+import { getSpeakerRequests } from "@/app/actions/rooms/get-speaker-requests";
 import { leaveRoom } from "@/app/actions/rooms/leave-room";
 import { muteParticipant } from "@/app/actions/rooms/mute-participant";
 import { removeFromStage } from "@/app/actions/rooms/remove-from-stage";
@@ -46,25 +46,18 @@ export function RoomAudioUI({
   const [hasRequested, setHasRequested] = useState(!!myPendingRequestId);
   const [selectedParticipant, setSelectedParticipant] = useState<{ identity: string; name: string } | null>(null);
   
-  // ✅ Local state for real-time updates
   const [liveRequests, setLiveRequests] = useState(pendingRequests);
-  
   const intentionalLeaveRef = useRef(false);
 
-  // ✅ LIGHTWEIGHT POLLING (Only for the Host)
-  // We use `fetch` on the Server Action instead of router.refresh() to prevent disconnects!
+  // ✅ Polling for Host only
   useEffect(() => {
     if (!isHost) return;
-
     const interval = setInterval(async () => {
       try {
         const newRequests = await getSpeakerRequests(roomId);
         setLiveRequests(newRequests);
-      } catch (err) {
-        console.error("Failed to fetch requests", err);
-      }
-    }, 2000); // Check every 2 seconds
-
+      } catch (err) {}
+    }, 2000);
     return () => clearInterval(interval);
   }, [isHost, roomId]);
 
@@ -91,7 +84,6 @@ export function RoomAudioUI({
     setDialogType(null);
     setIsPending(true);
     intentionalLeaveRef.current = true; 
-    
     sessionStorage.setItem("room-toast", "You left the room.");
     leaveRoom({ roomId }).catch(console.error);
     router.push("/rooms");
@@ -102,7 +94,6 @@ export function RoomAudioUI({
     setDialogType(null);
     setIsPending(true);
     intentionalLeaveRef.current = true; 
-    
     const res = await deleteRoom({ roomId });
     if (res.success) {
       sessionStorage.setItem("room-toast", "You closed the room.");
@@ -123,22 +114,22 @@ export function RoomAudioUI({
   const handleRequestSpeaker = async () => {
     setHasRequested(true);
     await requestSpeaker(roomId);
-    // No refresh needed. The Host's polling will catch it.
   };
 
   const handleCancelRequest = async () => {
     setHasRequested(false);
     await cancelSpeakerRequest(roomId);
-    // Optimistically remove from Host's local view
     setLiveRequests((prev) => prev.filter((r) => r.userId !== myPendingRequestId));
   };
 
   const handleApproveRequest = async (requestId: string, status: "APPROVED" | "DECLINED") => {
-    // 1. Remove from Host's UI instantly
     setLiveRequests((prev) => prev.filter((r) => r.id !== requestId));
-    // 2. Update DB
     await handleSpeakerRequest(requestId, status, roomId);
   };
+
+  // ✅ Determine if the raise hand button should show
+  // It should ONLY show if: The user is a listener AND they haven't requested yet.
+  const shouldShowRaiseHand = initialRole === "listener" && !hasRequested;
 
   return (
     <>
@@ -258,7 +249,8 @@ export function RoomAudioUI({
           transition={{ duration: 0.6, delay: 0.2, ease: "easeOut" }}
           className="absolute bottom-0 left-0 right-0 z-20 flex flex-col items-center gap-4 bg-linear-to-t from-background via-background/90 to-transparent pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-12"
         >
-          {initialRole === "listener" && !hasRequested && (
+          {/* ✅ FIXED: Only show Raise Hand if listener AND not requested */}
+          {shouldShowRaiseHand && (
             <button
               onClick={handleRequestSpeaker}
               className="mb-2 flex items-center gap-2 rounded-full border border-[#6B4A3A] bg-background px-6 py-3 text-sm font-semibold text-[#6B4A3A] shadow-lg transition-all hover:bg-[#6B4A3A]/5"
