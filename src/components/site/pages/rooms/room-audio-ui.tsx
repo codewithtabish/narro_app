@@ -98,13 +98,15 @@ export function RoomAudioUI(props: RoomAudioUIProps) {
   const [deafened, setDeafened] = useState(false);
 
   const handleDisconnected = (reason?: DisconnectReason) => {
+    // ✅ Ignore the disconnect if we are intentionally leaving or if it's a network drop
     if (intentionalLeaveRef.current) return;
 
     let message: string | null = null;
     if (reason === DisconnectReason.ROOM_DELETED) message = "The host closed the room.";
     else if (reason === DisconnectReason.PARTICIPANT_REMOVED) message = "You were removed from the room.";
     else if (reason === DisconnectReason.DUPLICATE_IDENTITY) message = "You joined this room from another device.";
-    if (!message) return;
+    
+    if (!message) return; // If it's a random network drop, LiveKit auto-reconnects.
 
     intentionalLeaveRef.current = true;
     sessionStorage.setItem("room-toast", message);
@@ -286,11 +288,7 @@ function RoomContent({
     return () => { document.body.style.overflow = originalStyle; };
   }, []);
 
-  useEffect(() => {
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
-    window.addEventListener("beforeunload", handleBeforeUnload);
-    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, []);
+  // ❌ REMOVED the window.beforeunload listener so the browser doesn't show "Leave site?"
 
   const handleLeave = () => {
     setDialogType(null); setIsPending(true); intentionalLeaveRef.current = true;
