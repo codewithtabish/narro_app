@@ -19,11 +19,11 @@ import { useEffect, useRef, useState } from "react";
 import { handleSpeakerRequest } from "@/app/actions/rooms/approve-speaker";
 import { cancelSpeakerRequest } from "@/app/actions/rooms/cancel-speaker-request";
 import { deleteRoom } from "@/app/actions/rooms/delete-room";
+import { getSpeakerRequests } from "@/app/actions/rooms/get-speaker-requests"; // ✅ Import the read action
 import { leaveRoom } from "@/app/actions/rooms/leave-room";
 import { muteParticipant } from "@/app/actions/rooms/mute-participant";
 import { removeFromStage } from "@/app/actions/rooms/remove-from-stage";
 import { requestSpeaker } from "@/app/actions/rooms/request-speaker";
-import { useSpeakerRequests } from "@/hooks/use-speaker-requests";
 import { cn } from "@/lib/utils";
 
 interface RoomAudioUIProps {
@@ -46,10 +46,27 @@ export function RoomAudioUI({
   const [hasRequested, setHasRequested] = useState(!!myPendingRequestId);
   const [selectedParticipant, setSelectedParticipant] = useState<{ identity: string; name: string } | null>(null);
   
+  // ✅ Local state for real-time updates
+  const [liveRequests, setLiveRequests] = useState(pendingRequests);
+  
   const intentionalLeaveRef = useRef(false);
 
-  // ✅ Polling hook (safe now)
-  useSpeakerRequests(isHost);
+  // ✅ LIGHTWEIGHT POLLING (Only for the Host)
+  // We use `fetch` on the Server Action instead of router.refresh() to prevent disconnects!
+  useEffect(() => {
+    if (!isHost) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const newRequests = await getSpeakerRequests(roomId);
+        setLiveRequests(newRequests);
+      } catch (err) {
+        console.error("Failed to fetch requests", err);
+      }
+    }, 2000); // Check every 2 seconds
+
+    return () => clearInterval(interval);
+  }, [isHost, roomId]);
 
   // Lock page scroll
   useEffect(() => {
@@ -73,7 +90,7 @@ export function RoomAudioUI({
   const handleLeave = () => {
     setDialogType(null);
     setIsPending(true);
-    intentionalLeaveRef.current = true;
+    intentionalLeaveRef.current = true; 
     
     sessionStorage.setItem("room-toast", "You left the room.");
     leaveRoom({ roomId }).catch(console.error);
@@ -84,7 +101,7 @@ export function RoomAudioUI({
   const handleDeleteRoom = async () => {
     setDialogType(null);
     setIsPending(true);
-    intentionalLeaveRef.current = true;
+    intentionalLeaveRef.current = true; 
     
     const res = await deleteRoom({ roomId });
     if (res.success) {
@@ -106,34 +123,41 @@ export function RoomAudioUI({
   const handleRequestSpeaker = async () => {
     setHasRequested(true);
     await requestSpeaker(roomId);
-    router.refresh();
+    // No refresh needed. The Host's polling will catch it.
   };
 
   const handleCancelRequest = async () => {
     setHasRequested(false);
     await cancelSpeakerRequest(roomId);
-    router.refresh();
+    // Optimistically remove from Host's local view
+    setLiveRequests((prev) => prev.filter((r) => r.userId !== myPendingRequestId));
+  };
+
+  const handleApproveRequest = async (requestId: string, status: "APPROVED" | "DECLINED") => {
+    // 1. Remove from Host's UI instantly
+    setLiveRequests((prev) => prev.filter((r) => r.id !== requestId));
+    // 2. Update DB
+    await handleSpeakerRequest(requestId, status, roomId);
   };
 
   return (
     <>
-      {/* ✅ Use a stable key so React never unmounts the LiveKitRoom */}
       <LiveKitRoom
-        key={`room-${roomId}`}
+        key={`room-${roomId}`} 
         token={token}
         serverUrl={serverUrl}
         connect={true}
         audio={initialRole !== "listener"}
         video={false}
         onDisconnected={handleDisconnected}
-        className="fixed inset-0 z-[9999] flex h-[100dvh] w-screen flex-col overflow-hidden bg-background text-foreground"
+        className="fixed inset-0 z-9999 flex h-dvh w-screen flex-col overflow-hidden bg-background text-foreground"
       >
         {/* Top Header */}
         <motion.header 
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, ease: "easeOut" }}
-          className="absolute top-0 left-0 right-0 z-20 flex w-full items-center justify-between px-6 py-6 sm:px-10 bg-gradient-to-b from-background to-transparent"
+          className="absolute top-0 left-0 right-0 z-20 flex w-full items-center justify-between px-6 py-6 sm:px-10 bg-linear-to-b from-background to-transparent"
         >
           <div className="font-serif text-[24px] sm:text-[28px] tracking-tight text-foreground">NARRO</div>
           <div className="absolute left-1/2 -translate-x-1/2 text-base sm:text-xl font-medium text-foreground">
@@ -157,14 +181,14 @@ export function RoomAudioUI({
         {/* Scrollable Center Area */}
         <div className="relative z-10 flex-1 overflow-y-auto custom-scrollbar">
           {/* WAITING ROOM ROW */}
-          {((isHost && pendingRequests.length > 0) || (!isHost && hasRequested)) && (
+          {((isHost && liveRequests.length > 0) || (!isHost && hasRequested)) && (
             <div className="flex flex-col items-center pt-24 pb-4 px-4">
               <span className="text-sm font-semibold text-muted-foreground mb-4 uppercase tracking-wider">
                 {isHost ? "Speaker Requests" : "Waiting Room"}
               </span>
               
               <div className="flex gap-4 overflow-x-auto w-full max-w-4xl justify-start sm:justify-center pb-4 px-2">
-                {isHost && pendingRequests.map((req) => (
+                {isHost && liveRequests.map((req) => (
                   <motion.div 
                     key={req.id}
                     initial={{ opacity: 0, scale: 0.9 }}
@@ -181,13 +205,13 @@ export function RoomAudioUI({
                     <span className="text-xs font-medium text-foreground truncate w-20 text-center">{req.name}</span>
                     <div className="flex gap-2 w-full">
                       <button
-                        onClick={async () => await handleSpeakerRequest(req.id, "DECLINED", roomId)}
+                        onClick={async () => await handleApproveRequest(req.id, "DECLINED")}
                         className="flex-1 flex items-center justify-center py-1.5 bg-red-500/10 text-red-500 rounded-full hover:bg-red-500/20"
                       >
                         <X size={14} />
                       </button>
                       <button
-                        onClick={async () => await handleSpeakerRequest(req.id, "APPROVED", roomId)}
+                        onClick={async () => await handleApproveRequest(req.id, "APPROVED")}
                         className="flex-1 flex items-center justify-center py-1.5 bg-emerald-500/10 text-emerald-500 rounded-full hover:bg-emerald-500/20"
                       >
                         <Check size={14} />
@@ -219,7 +243,7 @@ export function RoomAudioUI({
           )}
 
           {/* Main Grid */}
-          <div className={cn("flex min-h-full items-center justify-center p-4 pb-56", (isHost && pendingRequests.length > 0) || hasRequested ? "pt-4" : "pt-32")}>
+          <div className={cn("flex min-h-full items-center justify-center p-4 pb-56", (isHost && liveRequests.length > 0) || hasRequested ? "pt-4" : "pt-32")}>
             <AudioGrid 
               isHost={isHost} 
               onSelectParticipant={(p) => setSelectedParticipant(p)} 
@@ -232,7 +256,7 @@ export function RoomAudioUI({
           initial={{ opacity: 0, y: 40 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.2, ease: "easeOut" }}
-          className="absolute bottom-0 left-0 right-0 z-20 flex flex-col items-center gap-4 bg-gradient-to-t from-background via-background/90 to-transparent pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-12"
+          className="absolute bottom-0 left-0 right-0 z-20 flex flex-col items-center gap-4 bg-linear-to-t from-background via-background/90 to-transparent pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-12"
         >
           {initialRole === "listener" && !hasRequested && (
             <button
@@ -255,7 +279,7 @@ export function RoomAudioUI({
       {/* Host Moderation Dialog */}
       <AnimatePresence>
         {selectedParticipant && (
-          <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-10000 flex items-center justify-center p-4">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -306,7 +330,7 @@ export function RoomAudioUI({
       {/* Leave / Delete Dialog */}
       <AnimatePresence>
         {dialogType && (
-          <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-10000 flex items-center justify-center p-4">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -404,7 +428,7 @@ function AudioGrid({ isHost, onSelectParticipant }: { isHost: boolean; onSelectP
                     initial={{ opacity: 0, scale: 0.8 }}
                     animate={{ opacity: 1, scale: 1 }}
                     className={cn(
-                      "absolute -inset-2 rounded-full border-[2px]",
+                      "absolute -inset-2 rounded-full border-2",
                       isSpeaking ? "border-[#10B981]" : "border-[#6B4A3A]" 
                     )}
                     style={{ zIndex: -1 }}
@@ -413,7 +437,7 @@ function AudioGrid({ isHost, onSelectParticipant }: { isHost: boolean; onSelectP
                        <motion.div 
                          animate={{ scale: [1, 1.05, 1], opacity: [0.3, 0.6, 0.3] }}
                          transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-                         className="absolute inset-0 rounded-full border-[2px] border-[#10B981]"
+                         className="absolute inset-0 rounded-full border-2 border-[#10B981]"
                        />
                      )}
                   </motion.div>
