@@ -275,15 +275,9 @@ function RoomContent({
 
   useEffect(() => {
     if (!isHost) return;
-
-    const initial = setTimeout(() => {
-      void refetchRequests();
-    }, 0);
-
+    const initial = setTimeout(() => { void refetchRequests(); }, 0);
     const onBack = () => void refetchRequests();
-    const onVisible = () => {
-      if (document.visibilityState === "visible") void refetchRequests();
-    };
+    const onVisible = () => { if (document.visibilityState === "visible") void refetchRequests(); };
 
     room.on(RoomEvent.Connected, onBack);
     room.on(RoomEvent.Reconnected, onBack);
@@ -297,12 +291,7 @@ function RoomContent({
   }, [isHost, room, refetchRequests]);
 
   useEffect(() => {
-    const onData = (
-      payload: Uint8Array,
-      participant?: unknown,
-      _kind?: unknown,
-      topic?: string,
-    ) => {
+    const onData = (payload: Uint8Array, participant?: unknown, _kind?: unknown, topic?: string) => {
       if (topic !== ROOM_SIGNAL_TOPIC || participant) return;
       const signal = decodeRoomSignal(payload);
       if (!signal) return;
@@ -323,14 +312,11 @@ function RoomContent({
     };
 
     room.on(RoomEvent.DataReceived, onData);
-    return () => {
-      room.off(RoomEvent.DataReceived, onData);
-    };
+    return () => { room.off(RoomEvent.DataReceived, onData); };
   }, [room, isHost, refetchRequests, showNotice]);
 
   useEffect(() => {
     const local = room.localParticipant;
-
     const onMetadata = () => {
       const next = parseRole(local.metadata);
       if (!next) return;
@@ -346,29 +332,21 @@ function RoomContent({
         haptic();
         local.setMicrophoneEnabled(true).catch(async () => {
           await sleep(700);
-          try {
-            await local.setMicrophoneEnabled(true);
-          } catch {
-            showNotice("You're a speaker. Tap the mic to unmute.");
-          }
+          try { await local.setMicrophoneEnabled(true); } 
+          catch { showNotice("You're a speaker. Tap the mic to unmute."); }
         });
       } else if (prev === "speaker" && next === "listener") {
         showNotice("You were moved to the audience.");
       }
     };
-
     local.on(ParticipantEvent.ParticipantMetadataChanged, onMetadata);
-    return () => {
-      local.off(ParticipantEvent.ParticipantMetadataChanged, onMetadata);
-    };
+    return () => { local.off(ParticipantEvent.ParticipantMetadataChanged, onMetadata); };
   }, [room, showNotice]);
 
   useEffect(() => {
     const originalStyle = window.getComputedStyle(document.body).overflow;
     document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = originalStyle;
-    };
+    return () => { document.body.style.overflow = originalStyle; };
   }, []);
 
   useEffect(() => {
@@ -395,7 +373,6 @@ function RoomContent({
     setDialogType(null);
     setIsPending(true);
     intentionalLeaveRef.current = true;
-
     const res = await deleteRoom({ roomId });
     if (res.success) {
       sessionStorage.setItem("room-toast", "You closed the room.");
@@ -412,36 +389,24 @@ function RoomContent({
     setHasRequested(true);
     haptic();
     const res = await requestSpeaker(roomId);
-    if (!res.success) {
-      setHasRequested(false);
-      showNotice(res.error ?? "Could not send your request.", "error");
-    }
+    if (!res.success) { setHasRequested(false); showNotice(res.error ?? "Could not send request.", "error"); }
   };
 
   const handleCancelRequest = async () => {
     setHasRequested(false);
     const res = await cancelSpeakerRequest(roomId);
-    if (!res.success) {
-      setHasRequested(true);
-      showNotice(res.error ?? "Could not cancel your request.", "error");
-    }
+    if (!res.success) { setHasRequested(true); showNotice(res.error ?? "Could not cancel.", "error"); }
   };
 
-  const handleApproveRequest = async (
-    req: SpeakerRequestItem,
-    status: "APPROVED" | "DECLINED",
-  ) => {
+  const handleApproveRequest = async (req: SpeakerRequestItem, status: "APPROVED" | "DECLINED") => {
     handledIds.current.add(req.id);
     knownIds.current.delete(req.id);
     setLiveRequests((prev) => prev.filter((r) => r.id !== req.id));
     haptic();
-    showNotice(
-      status === "APPROVED" ? `${req.name} can now speak` : `Declined ${req.name}`,
-      status === "APPROVED" ? "success" : "info",
-    );
+    showNotice(status === "APPROVED" ? `${req.name} can now speak` : `Declined ${req.name}`, status === "APPROVED" ? "success" : "info");
 
     const res = await handleSpeakerRequest(req.id, status, roomId);
-    if (!res.success) showNotice(res.error ?? "Could not update the request.", "error");
+    if (!res.success) showNotice(res.error ?? "Could not update request.", "error");
 
     handledIds.current.delete(req.id);
     void refetchRequests();
@@ -462,7 +427,7 @@ function RoomContent({
     setSelected(null);
     showNotice(`${target.name} moved to the audience`);
     const res = await removeFromStage({ roomId, participantIdentity: target.identity });
-    if (!res.success) showNotice(res.error ?? "Could not move this person.", "error");
+    if (!res.success) showNotice(res.error ?? "Could not move.", "error");
   };
 
   return (
@@ -507,15 +472,9 @@ function RoomContent({
         {/* Right Sidebar: Requests */}
         <aside className="hidden w-72 flex-col overflow-y-auto border-l border-border/50 p-4 lg:flex custom-scrollbar">
           {isHost ? (
-            <RequestsSidebar
-              requests={liveRequests}
-              onApprove={handleApproveRequest}
-            />
+            <RequestsSidebar requests={liveRequests} onApprove={handleApproveRequest} />
           ) : (
-            <MyRequestSidebar
-              raised={raised}
-              onCancel={handleCancelRequest}
-            />
+            <MyRequestSidebar raised={raised} onCancel={handleCancelRequest} />
           )}
         </aside>
       </div>
@@ -567,50 +526,20 @@ function RoomContent({
         </p>
       </motion.div>
 
-      {/* Dialogs (same logic, just styled nicely) */}
+      {/* Dialogs */}
       <AnimatePresence>
         {selected && (
           <div className="fixed inset-0 z-10000 flex items-center justify-center">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-              onClick={() => setSelected(null)}
-            />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 10 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              className={cn(DIALOG_WIDTH, "relative rounded-[24px] border border-border bg-card p-6 text-center shadow-2xl")}
-            >
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setSelected(null)} />
+            <motion.div initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 10 }} className={cn(DIALOG_WIDTH, "relative rounded-[24px] border border-border bg-card p-6 text-center shadow-2xl")}>
               <h3 className="font-serif text-xl text-card-foreground">Manage {selected.name}</h3>
               {selected.role === "speaker" ? (
                 <div className="mt-6 flex flex-col gap-3">
-                  <button
-                    onClick={handleForceMute}
-                    className="flex items-center justify-center gap-2 rounded-full bg-amber-500/10 px-6 py-3 text-sm font-semibold text-amber-600 transition-colors hover:bg-amber-500/20 active:scale-95"
-                  >
-                    <MicOff size={18} /> Force Mute
-                  </button>
-                  <button
-                    onClick={handleMoveToAudience}
-                    className="flex items-center justify-center gap-2 rounded-full bg-orange-500/10 px-6 py-3 text-sm font-semibold text-orange-600 transition-colors hover:bg-orange-500/20 active:scale-95"
-                  >
-                    <Headphones size={18} /> Move to Audience
-                  </button>
+                  <button onClick={handleForceMute} className="flex items-center justify-center gap-2 rounded-full bg-amber-500/10 px-6 py-3 text-sm font-semibold text-amber-600 transition-colors hover:bg-amber-500/20 active:scale-95"><MicOff size={18} /> Force Mute</button>
+                  <button onClick={handleMoveToAudience} className="flex items-center justify-center gap-2 rounded-full bg-orange-500/10 px-6 py-3 text-sm font-semibold text-orange-600 transition-colors hover:bg-orange-500/20 active:scale-95"><Headphones size={18} /> Move to Audience</button>
                 </div>
-              ) : (
-                <p className="mt-4 text-sm text-muted-foreground">
-                  This person is in the audience. They can raise their hand to speak.
-                </p>
-              )}
-              <button
-                onClick={() => setSelected(null)}
-                className="mt-4 text-sm font-semibold text-muted-foreground hover:text-foreground"
-              >
-                Cancel
-              </button>
+              ) : ( <p className="mt-4 text-sm text-muted-foreground">This person is in the audience.</p> )}
+              <button onClick={() => setSelected(null)} className="mt-4 text-sm font-semibold text-muted-foreground hover:text-foreground">Cancel</button>
             </motion.div>
           </div>
         )}
@@ -619,43 +548,13 @@ function RoomContent({
       <AnimatePresence>
         {dialogType && (
           <div className="fixed inset-0 z-10000 flex items-center justify-center">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-              onClick={() => !isPending && setDialogType(null)}
-            />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 10 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              className={cn(DIALOG_WIDTH, "relative rounded-[24px] border border-border bg-card p-6 shadow-2xl")}
-            >
-              <h3 className="font-serif text-xl text-card-foreground">
-                {dialogType === "leave" ? "Leave room?" : "Close room for everyone?"}
-              </h3>
-              <p className="mt-2 text-[14px] text-muted-foreground">
-                {dialogType === "leave"
-                  ? "You can always join back later. The conversation will continue without you."
-                  : "This will permanently delete the room and disconnect all participants. This action cannot be undone."}
-              </p>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => !isPending && setDialogType(null)} />
+            <motion.div initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 10 }} className={cn(DIALOG_WIDTH, "relative rounded-[24px] border border-border bg-card p-6 shadow-2xl")}>
+              <h3 className="font-serif text-xl text-card-foreground">{dialogType === "leave" ? "Leave room?" : "Close room for everyone?"}</h3>
+              <p className="mt-2 text-[14px] text-muted-foreground">{dialogType === "leave" ? "You can always join back later. The conversation will continue without you." : "This will permanently delete the room and disconnect all participants. This action cannot be undone."}</p>
               <div className="mt-8 flex items-center justify-end gap-3">
-                <button
-                  onClick={() => setDialogType(null)}
-                  disabled={isPending}
-                  className="rounded-full px-5 py-2.5 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={dialogType === "leave" ? handleLeave : handleDeleteRoom}
-                  disabled={isPending}
-                  className={cn(
-                    "flex items-center gap-2 rounded-full px-6 py-2.5 text-sm font-semibold text-white disabled:opacity-50",
-                    dialogType === "leave" ? "bg-red-500 hover:bg-red-600" : "bg-red-600 hover:bg-red-700",
-                  )}
-                >
+                <button onClick={() => setDialogType(null)} disabled={isPending} className="rounded-full px-5 py-2.5 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-50">Cancel</button>
+                <button onClick={dialogType === "leave" ? handleLeave : handleDeleteRoom} disabled={isPending} className={cn("flex items-center gap-2 rounded-full px-6 py-2.5 text-sm font-semibold text-white disabled:opacity-50", dialogType === "leave" ? "bg-red-500 hover:bg-red-600" : "bg-red-600 hover:bg-red-700")}>
                   {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
                   {dialogType === "leave" ? "Leave Room" : "Close Room"}
                 </button>
@@ -674,9 +573,9 @@ function RoomContent({
 
 function AudienceSidebar() {
   const participants = useRoomParticipants();
-  const audience = participants
-    .map((p) => ({ p, ...parseMeta(p) }))
-    .filter((e) => e.role === "listener");
+  const audience = participants.map((p) => ({ p, ...parseMeta(p) })).filter((e) => e.role === "listener");
+
+  if (audience.length === 0) return null; // ✅ Hides the sidebar content when empty
 
   return (
     <>
@@ -687,18 +586,10 @@ function AudienceSidebar() {
         {audience.map(({ p, avatarUrl }) => (
           <div key={p.identity} className="flex items-center gap-3">
             <div className="relative h-8 w-8 shrink-0 overflow-hidden rounded-full border border-border">
-              {avatarUrl ? (
-                <Image src={avatarUrl} alt="avatar" fill className="object-cover" />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center bg-[#6B4A3A] text-xs text-white">
-                  {p.name?.[0]?.toUpperCase()}
-                </div>
-              )}
+              {avatarUrl ? <Image src={avatarUrl} alt="avatar" fill className="object-cover" /> : <div className="flex h-full w-full items-center justify-center bg-[#6B4A3A] text-xs text-white">{p.name?.[0]?.toUpperCase()}</div>}
             </div>
             <div className="flex flex-col">
-              <span className="max-w-[120px] truncate text-sm font-medium text-foreground">
-                {p.isLocal ? "You" : p.name}
-              </span>
+              <span className="max-w-[120px] truncate text-sm font-medium text-foreground">{p.isLocal ? "You" : p.name}</span>
               <span className="text-[11px] text-muted-foreground">Listening</span>
             </div>
           </div>
@@ -708,19 +599,12 @@ function AudienceSidebar() {
   );
 }
 
-function RequestsSidebar({
-  requests,
-  onApprove,
-}: {
-  requests: SpeakerRequestItem[];
-  onApprove: (req: SpeakerRequestItem, status: "APPROVED" | "DECLINED") => void;
-}) {
+function RequestsSidebar({ requests, onApprove }: { requests: SpeakerRequestItem[]; onApprove: (req: SpeakerRequestItem, status: "APPROVED" | "DECLINED") => void; }) {
   return (
     <>
       <div className="mb-4 text-xs font-semibold uppercase tracking-wider text-[#6B4A3A]">
         Speaker Requests · {requests.length}
       </div>
-
       {requests.length === 0 ? (
         <div className="mt-10 flex flex-col items-center text-center text-muted-foreground">
           <Hand className="mb-2 h-8 w-8 opacity-20" />
@@ -730,21 +614,10 @@ function RequestsSidebar({
       ) : (
         <div className="flex flex-col gap-3">
           {requests.map((req) => (
-            <motion.div
-              key={req.id}
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="flex items-center justify-between rounded-xl border border-border bg-card p-3 shadow-sm"
-            >
+            <motion.div key={req.id} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="flex items-center justify-between rounded-xl border border-border bg-card p-3 shadow-sm">
               <div className="flex items-center gap-3">
                 <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full bg-muted">
-                  {req.avatarUrl ? (
-                    <Image src={req.avatarUrl} alt={req.name} fill className="object-cover" />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center bg-[#6B4A3A] text-sm text-white">
-                      {req.name[0]?.toUpperCase()}
-                    </div>
-                  )}
+                  {req.avatarUrl ? <Image src={req.avatarUrl} alt={req.name} fill className="object-cover" /> : <div className="flex h-full w-full items-center justify-center bg-[#6B4A3A] text-sm text-white">{req.name[0]?.toUpperCase()}</div>}
                 </div>
                 <div className="flex flex-col">
                   <span className="max-w-[100px] truncate text-sm font-medium text-foreground">{req.name}</span>
@@ -752,18 +625,8 @@ function RequestsSidebar({
                 </div>
               </div>
               <div className="flex gap-1.5">
-                <button
-                  onClick={() => onApprove(req, "DECLINED")}
-                  className="flex h-8 w-8 items-center justify-center rounded-full bg-red-500/10 text-red-500 hover:bg-red-500/20 active:scale-95"
-                >
-                  <X size={16} />
-                </button>
-                <button
-                  onClick={() => onApprove(req, "APPROVED")}
-                  className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 active:scale-95"
-                >
-                  <Check size={16} />
-                </button>
+                <button onClick={() => onApprove(req, "DECLINED")} className="flex h-8 w-8 items-center justify-center rounded-full bg-red-500/10 text-red-500 hover:bg-red-500/20 active:scale-95"><X size={16} /></button>
+                <button onClick={() => onApprove(req, "APPROVED")} className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 active:scale-95"><Check size={16} /></button>
               </div>
             </motion.div>
           ))}
@@ -775,50 +638,42 @@ function RequestsSidebar({
 
 function MyRequestSidebar({ raised, onCancel }: { raised: boolean; onCancel: () => void }) {
   if (!raised) return null;
-
   return (
     <>
-      <div className="mb-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-        Your Status
-      </div>
+      <div className="mb-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Your Status</div>
       <div className="flex flex-col items-center gap-3 rounded-xl border border-[#6B4A3A]/30 bg-[#6B4A3A]/5 p-4 text-center">
-        <div className="relative flex h-12 w-12 animate-pulse items-center justify-center rounded-full bg-[#6B4A3A] font-serif text-lg text-white">
-          You
-        </div>
+        <div className="relative flex h-12 w-12 animate-pulse items-center justify-center rounded-full bg-[#6B4A3A] font-serif text-lg text-white">You</div>
         <span className="text-sm font-medium text-[#6B4A3A]">Hand raised ✋</span>
-        <button
-          onClick={onCancel}
-          className="mt-1 w-full rounded-full bg-red-500/10 py-2 text-xs font-semibold text-red-500 transition hover:bg-red-500/20 active:scale-95"
-        >
-          Cancel Request
-        </button>
+        <button onClick={onCancel} className="mt-1 w-full rounded-full bg-red-500/10 py-2 text-xs font-semibold text-red-500 transition hover:bg-red-500/20 active:scale-95">Cancel Request</button>
       </div>
     </>
   );
 }
 
-function RoomStage({
-  isHost,
-  onManage,
-}: {
-  isHost: boolean;
-  onManage: (p: { identity: string; name: string; role: Role }) => void;
-}) {
+function RoomStage({ isHost, onManage }: { isHost: boolean; onManage: (p: { identity: string; name: string; role: Role }) => void; }) {
   const participants = useRoomParticipants();
-
   const entries = participants.map((p) => ({ p, ...parseMeta(p) }));
-  const stage = entries
-    .filter((e) => e.role !== "listener")
-    .sort((a, b) => Number(b.role === "host") - Number(a.role === "host"));
+  const stage = entries.filter((e) => e.role !== "listener").sort((a, b) => Number(b.role === "host") - Number(a.role === "host"));
+
+  // ✅ Dynamic Sizing Logic (Like Zoom/Meet)
+  const count = stage.length;
+  const gridCols = count === 1 ? "grid-cols-1" : count === 2 ? "grid-cols-2" : count <= 4 ? "grid-cols-2" : "grid-cols-3";
+  
+  // Smaller avatars if there are more people
+  const avatarSize = count === 1 
+    ? "h-40 w-40 sm:h-56 sm:w-56" 
+    : count === 2 
+      ? "h-32 w-32 sm:h-44 sm:w-44" 
+      : "h-24 w-24 sm:h-32 sm:w-32";
 
   return (
     <div className="flex h-full flex-col items-center justify-center">
-      {stage.length > 0 ? (
-        <div className="flex w-full flex-col items-center gap-6">
+      {count > 0 ? (
+        <div className="flex w-full flex-col items-center gap-8">
           <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            On Stage · {stage.length}
+            On Stage · {count}
           </span>
-          <div className="grid w-full max-w-3xl grid-cols-2 place-items-center gap-x-8 gap-y-12 sm:grid-cols-3">
+          <div className={cn("grid w-full max-w-4xl place-items-center gap-x-8 gap-y-12", gridCols)}>
             <AnimatePresence>
               {stage.map(({ p, role, avatarUrl }) => (
                 <ParticipantTile
@@ -826,11 +681,8 @@ function RoomStage({
                   p={p}
                   role={role}
                   avatarUrl={avatarUrl}
-                  onManage={
-                    isHost && !p.isLocal
-                      ? () => onManage({ identity: p.identity, name: p.name || "User", role })
-                      : undefined
-                  }
+                  avatarSize={avatarSize}
+                  onManage={isHost && !p.isLocal ? () => onManage({ identity: p.identity, name: p.name || "User", role }) : undefined}
                 />
               ))}
             </AnimatePresence>
@@ -843,17 +695,7 @@ function RoomStage({
   );
 }
 
-function ParticipantTile({
-  p,
-  role,
-  avatarUrl,
-  onManage,
-}: {
-  p: Participant;
-  role: Role;
-  avatarUrl: string | null;
-  onManage?: () => void;
-}) {
+function ParticipantTile({ p, role, avatarUrl, avatarSize, onManage }: { p: Participant; role: Role; avatarUrl: string | null; avatarSize: string; onManage?: () => void; }) {
   const isHostRole = role === "host";
   const isSpeaking = p.isSpeaking && p.isMicrophoneEnabled;
   const micOff = !p.isMicrophoneEnabled;
@@ -869,34 +711,18 @@ function ParticipantTile({
       onClick={onManage}
     >
       <div className="relative isolate">
-        <div
-          className={cn(
-            "absolute -inset-2 -z-10 rounded-full border-2 transition-colors",
-            isSpeaking ? "border-[#10B981]" : "border-[#6B4A3A]",
-          )}
-        >
+        <div className={cn("absolute -inset-2 -z-10 rounded-full border-2 transition-colors", isSpeaking ? "border-[#10B981]" : "border-[#6B4A3A]")}>
           {isSpeaking && (
-            <motion.div
-              animate={{ scale: [1, 1.08, 1], opacity: [0.3, 0.7, 0.3] }}
-              transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
-              className="absolute inset-0 rounded-full border-2 border-[#10B981]"
-            />
+            <motion.div animate={{ scale: [1, 1.08, 1], opacity: [0.3, 0.7, 0.3] }} transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }} className="absolute inset-0 rounded-full border-2 border-[#10B981]" />
           )}
         </div>
 
-        <div
-          className={cn(
-            "relative flex h-28 w-28 items-center justify-center overflow-hidden rounded-full border-[3px] shadow-sm transition-all duration-300 sm:h-32 sm:w-32",
-            isHostRole ? "border-[#FAF9F6]" : "border-[#6B4A3A]",
-          )}
-        >
+        <div className={cn("relative flex items-center justify-center overflow-hidden rounded-full border-[3px] shadow-sm transition-all duration-300", avatarSize, isHostRole ? "border-[#FAF9F6]" : "border-[#6B4A3A]")}>
           {avatarUrl ? (
-            <Image src={avatarUrl} alt={name} fill sizes="128px" className="object-cover" />
+            <Image src={avatarUrl} alt={name} fill sizes="(max-width: 768px) 100vw, 256px" className="object-cover" />
           ) : (
             <div className="flex h-full w-full items-center justify-center bg-[#6B4A3A] text-white">
-              <span className="font-serif text-4xl font-medium sm:text-5xl">
-                {p.name?.[0]?.toUpperCase() ?? "?"}
-              </span>
+              <span className="font-serif text-4xl font-medium sm:text-5xl">{p.name?.[0]?.toUpperCase() ?? "?"}</span>
             </div>
           )}
         </div>
@@ -908,19 +734,15 @@ function ParticipantTile({
         )}
 
         {!isHostRole && (
-          <div className="absolute bottom-0 right-0 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-background shadow-md border border-border">
+          <div className="absolute bottom-0 right-0 z-10 flex h-7 w-7 items-center justify-center rounded-full border border-border bg-background shadow-md">
             {micOff ? <MicOff size={13} className="text-red-500" /> : <Mic size={13} className="text-[#10B981]" />}
           </div>
         )}
       </div>
 
       <div className="flex flex-col items-center">
-        <span className="max-w-[120px] truncate text-sm font-medium tracking-wide text-foreground">
-          {name}
-        </span>
-        <span className="text-[12px] font-medium text-muted-foreground">
-          {isHostRole ? "Host" : "Speaker"}
-        </span>
+        <span className="max-w-[120px] truncate text-sm font-medium tracking-wide text-foreground">{name}</span>
+        <span className="text-[12px] font-medium text-muted-foreground">{isHostRole ? "Host" : "Speaker"}</span>
       </div>
     </motion.div>
   );
@@ -930,48 +752,25 @@ function ParticipantTile({
 /*  Control Dock                                                              */
 /* -------------------------------------------------------------------------- */
 
-function ControlDock({
-  onLeave,
-  isListener,
-  deafened,
-  onToggleDeafen,
-}: {
-  onLeave: () => void;
-  isListener: boolean;
-  deafened: boolean;
-  onToggleDeafen: () => void;
-}) {
+function ControlDock({ onLeave, isListener, deafened, onToggleDeafen }: { onLeave: () => void; isListener: boolean; deafened: boolean; onToggleDeafen: () => void; }) {
   const { localParticipant, isMicrophoneEnabled } = useLocalParticipant();
-
   const [optimistic, setOptimistic] = useState<{ value: boolean; base: boolean } | null>(null);
   const busy = useRef(false);
   const clearTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const micOn =
-    optimistic && optimistic.base === isMicrophoneEnabled
-      ? optimistic.value
-      : isMicrophoneEnabled;
+  const micOn = optimistic && optimistic.base === isMicrophoneEnabled ? optimistic.value : isMicrophoneEnabled;
 
-  useEffect(
-    () => () => {
-      if (clearTimer.current) clearTimeout(clearTimer.current);
-    },
-    [],
-  );
+  useEffect(() => () => { if (clearTimer.current) clearTimeout(clearTimer.current); }, []);
 
   const toggleMic = async () => {
     if (isListener || !localParticipant || busy.current) return;
     busy.current = true;
-
     const next = !micOn;
     setOptimistic({ value: next, base: isMicrophoneEnabled });
 
-    try {
-      await localParticipant.setMicrophoneEnabled(next);
-    } catch (err) {
-      console.error("Mic toggle failed", err);
-      setOptimistic(null);
-    } finally {
+    try { await localParticipant.setMicrophoneEnabled(next); } 
+    catch (err) { console.error("Mic toggle failed", err); setOptimistic(null); } 
+    finally {
       busy.current = false;
       if (clearTimer.current) clearTimeout(clearTimer.current);
       clearTimer.current = setTimeout(() => setOptimistic(null), 1500);
@@ -980,37 +779,15 @@ function ControlDock({
 
   return (
     <div className="flex items-center gap-5 rounded-full border border-black/5 bg-white/70 px-5 py-3 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-black/50 sm:gap-6 sm:px-6 sm:py-4">
-      <button
-        onClick={toggleMic}
-        disabled={isListener}
-        className={cn(
-          "flex h-12 w-12 items-center justify-center rounded-full shadow-sm transition-all duration-200 active:scale-95 sm:h-14 sm:w-14",
-          isListener
-            ? "cursor-not-allowed bg-neutral-200 opacity-50 dark:bg-neutral-800"
-            : !micOn
-              ? "bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-400"
-              : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-700",
-        )}
-      >
+      <button onClick={toggleMic} disabled={isListener} className={cn("flex h-12 w-12 items-center justify-center rounded-full shadow-sm transition-all duration-200 active:scale-95 sm:h-14 sm:w-14", isListener ? "cursor-not-allowed bg-neutral-200 opacity-50 dark:bg-neutral-800" : !micOn ? "bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-400" : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-700")}>
         {isListener || !micOn ? <MicOff size={22} /> : <Mic size={22} />}
       </button>
 
-      <button
-        onClick={onLeave}
-        className="flex h-14 w-14 items-center justify-center rounded-full bg-[#EF4444] text-white shadow-lg transition-transform hover:scale-105 active:scale-95 sm:h-16 sm:w-16"
-      >
+      <button onClick={onLeave} className="flex h-14 w-14 items-center justify-center rounded-full bg-[#EF4444] text-white shadow-lg transition-transform hover:scale-105 active:scale-95 sm:h-16 sm:w-16">
         <PhoneOff size={26} />
       </button>
 
-      <button
-        onClick={onToggleDeafen}
-        className={cn(
-          "flex h-12 w-12 items-center justify-center rounded-full shadow-sm transition-all duration-200 active:scale-95 sm:h-14 sm:w-14",
-          deafened
-            ? "bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-400"
-            : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-700",
-        )}
-      >
+      <button onClick={onToggleDeafen} className={cn("flex h-12 w-12 items-center justify-center rounded-full shadow-sm transition-all duration-200 active:scale-95 sm:h-14 sm:w-14", deafened ? "bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-400" : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-700")}>
         {deafened ? <VolumeX size={22} /> : <Volume2 size={22} />}
       </button>
     </div>
