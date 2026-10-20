@@ -4,11 +4,10 @@
 import { after } from "next/server";
 import { z } from "zod";
 
-import { revalidateSingleRoom } from "@/lib/cache-keys";
 import prisma from "@/lib/clients/prisma-client";
 import { getCurrentUser } from "@/lib/rooms/current-user.server";
 import type { ActionResult } from "@/lib/rooms/room-events";
-import { sendRoomSignal } from "@/lib/rooms/room-signals.server";
+import { sendRoomSignal, setParticipantRole } from "@/lib/rooms/room-signals.server";
 
 const inputSchema = z.object({
   roomId: z.string().min(1, "roomId is required"),
@@ -23,27 +22,34 @@ export async function leaveRoom(input: z.infer<typeof inputSchema>): Promise<Act
     const me = await getCurrentUser();
     if (!me) return { success: false, error: "Not authenticated." };
 
-    // Everything is background: the leaver never waits.
+    // ✅ AWAITED: Demote them immediately so the DB is updated the moment they leave.
+    // We use `updateMany` so it doesn't crash if they were already a listener.
+    await prisma.roomSpeakerRequest.updateMany({
+      where: { roomId, userId: me.id },
+      data: { status: "DECLINED" }, // Demotes them back to audience
+    });
+
+    // ✅ BACKGROUND: Update LiveKit & notify host
     after(async () => {
       try {
         const room = await prisma.room.findUnique({
           where: { id: roomId },
           select: { status: true, hostId: true, liveKitRoomName: true },
         });
+        
         if (!room || room.status !== "OPEN") return;
 
-        // Leaving with a raised hand: drop it and refresh the host's list
-        const { count } = await prisma.roomSpeakerRequest.deleteMany({
+        // Remove their raised hand from the Host's UI
+        await prisma.roomSpeakerRequest.deleteMany({
           where: { roomId, userId: me.id, status: "PENDING" },
         });
-        if (count > 0) {
-          await sendRoomSignal(room.liveKitRoomName, { type: "REQUESTS_CHANGED" }, [
-            room.hostId,
-          ]);
-        }
+        await sendRoomSignal(room.liveKitRoomName, { type: "REQUESTS_CHANGED" }, [room.hostId]);
 
-        // Room stays OPEN. Refresh cached room snapshot for everyone else.
-        revalidateSingleRoom(roomId);
+        // Force them to listener role in LiveKit (if they rejoin)
+        try {
+          await setParticipantRole(room.liveKitRoomName, me.id, "listener");
+        } catch {} // Ignore if already disconnected
+
       } catch (err) {
         console.error("[leaveRoom] Background error:", err);
       }

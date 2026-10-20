@@ -4,7 +4,11 @@
 import { auth } from "@clerk/nextjs/server";
 import { z } from "zod";
 
-import { revalidateRooms, revalidateSingleRoom } from "@/lib/cache-keys";
+import {
+  revalidateRooms,
+  revalidateSingleRoom,
+  revalidateUserRoom, // ✅ Import revalidateUserRoom
+} from "@/lib/cache-keys";
 import { deleteLiveKitRoom } from "@/lib/clients/livekit-client";
 import prisma from "@/lib/clients/prisma-client";
 
@@ -44,7 +48,7 @@ export async function deleteRoom(
       prisma.room.delete({ where: { id: roomId } }),
     ]);
 
-    // 2. Kick everyone out of the audio room (guests get "The host closed the room.")
+    // 2. Kick everyone out of the audio room
     try {
       await deleteLiveKitRoom(room.liveKitRoomName);
     } catch (err) {
@@ -54,6 +58,7 @@ export async function deleteRoom(
     // 3. Revalidate AFTER the data really changed
     revalidateSingleRoom(roomId);
     revalidateRooms();
+    revalidateUserRoom(clerkUserId); // ✅ Clear the user's "active room" cache
 
     return { success: true };
   } catch (err) {

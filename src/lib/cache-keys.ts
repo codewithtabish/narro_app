@@ -34,6 +34,12 @@ export const CACHE_TAGS = {
   room: (roomId: string) => `room:${roomId}`,
 
   /**
+   * ✅ NEW: Tracks if a specific user has an active room.
+   * Used to prevent users from creating multiple rooms at once.
+   */
+  userRoom: (clerkId: string) => `user-room:${clerkId}`,
+
+  /**
    * @deprecated Speaker requests are live data now (real-time via LiveKit,
    * never cached). Kept only so old imports don't break the build.
    */
@@ -60,10 +66,6 @@ export function revalidateRooms() {
 
 /**
  * Call when a single room's snapshot changes (someone left, etc.).
- *
- * ⚠️ It deliberately does NOT revalidate `/rooms/active/[id]`.
- * Revalidating the page a user is sitting in re-renders it with new props
- * (a fresh LiveKit token) and makes <LiveKitRoom> reconnect.
  */
 export function revalidateSingleRoom(roomId: string) {
   revalidateTag(CACHE_TAGS.room(roomId), NOW);
@@ -73,8 +75,16 @@ export function revalidateSingleRoom(roomId: string) {
 }
 
 /**
- * @deprecated No-op. Speaker requests are no longer cached or revalidated;
- * the host gets them in real time through the LiveKit data channel.
+ * ✅ NEW: Call when a user CREATES or CLOSES a room.
+ * Clears the cache so the user can create a new room.
+ */
+export function revalidateUserRoom(clerkId: string) {
+  revalidateTag(CACHE_TAGS.userRoom(clerkId), NOW);
+  revalidatePath("/rooms");
+}
+
+/**
+ * @deprecated No-op. Speaker requests are no longer cached or revalidated.
  */
 export function revalidateSpeakerRequests(_roomId: string) {
   // intentionally empty

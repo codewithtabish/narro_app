@@ -98,15 +98,13 @@ export function RoomAudioUI(props: RoomAudioUIProps) {
   const [deafened, setDeafened] = useState(false);
 
   const handleDisconnected = (reason?: DisconnectReason) => {
-    // ✅ Ignore the disconnect if we are intentionally leaving or if it's a network drop
     if (intentionalLeaveRef.current) return;
 
     let message: string | null = null;
     if (reason === DisconnectReason.ROOM_DELETED) message = "The host closed the room.";
     else if (reason === DisconnectReason.PARTICIPANT_REMOVED) message = "You were removed from the room.";
     else if (reason === DisconnectReason.DUPLICATE_IDENTITY) message = "You joined this room from another device.";
-    
-    if (!message) return; // If it's a random network drop, LiveKit auto-reconnects.
+    if (!message) return;
 
     intentionalLeaveRef.current = true;
     sessionStorage.setItem("room-toast", message);
@@ -288,8 +286,6 @@ function RoomContent({
     return () => { document.body.style.overflow = originalStyle; };
   }, []);
 
-  // ❌ REMOVED the window.beforeunload listener so the browser doesn't show "Leave site?"
-
   const handleLeave = () => {
     setDialogType(null); setIsPending(true); intentionalLeaveRef.current = true;
     sessionStorage.setItem("room-toast", "You left the room.");
@@ -340,13 +336,22 @@ function RoomContent({
     if (!res.success) showNotice(res.error ?? "Could not move.", "error");
   };
 
+  const openLeaveDialog = () => {
+    setIsPending(false);
+    setDialogType("leave");
+  };
+
+  const openDeleteDialog = () => {
+    setIsPending(false);
+    setDialogType("delete");
+  };
+
   return (
     <>
-      {/* ✅ TOP HEADER (Delete Icon ONLY) */}
       {isHost && (
         <div className="absolute right-6 top-6 z-30">
           <button
-            onClick={() => setDialogType("delete")}
+            onClick={openDeleteDialog}
             disabled={isPending}
             className="flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10 text-red-500 transition-colors hover:bg-red-500/20 disabled:opacity-50"
             title="Delete Room"
@@ -356,20 +361,15 @@ function RoomContent({
         </div>
       )}
 
-      {/* Main Layout */}
       <div className="flex flex-1 flex-col overflow-hidden md:flex-row">
-        
-        {/* Left Sidebar: Audience (Desktop Only) */}
         <aside className="hidden w-64 flex-col overflow-y-auto border-r border-border/50 p-4 md:flex custom-scrollbar">
           <AudienceSidebar />
         </aside>
 
-        {/* Center: Stage */}
         <main className="relative flex flex-1 flex-col overflow-y-auto custom-scrollbar p-6 pt-16 md:pt-6">
           <RoomStage isHost={isHost} onManage={(p) => setSelected(p)} />
         </main>
 
-        {/* Right Sidebar: Requests (Desktop Only) */}
         <aside className="hidden w-72 flex-col overflow-y-auto border-l border-border/50 p-4 lg:flex custom-scrollbar">
           {isHost ? (
             <RequestsSidebar requests={liveRequests} onApprove={handleApproveRequest} />
@@ -379,7 +379,6 @@ function RoomContent({
         </aside>
       </div>
 
-      {/* ✅ Mobile Drawer/Row for Requests & Audience */}
       <div className="flex flex-col gap-4 px-4 pb-32 md:hidden">
         {isHost && liveRequests.length > 0 && (
           <div className="mt-4">
@@ -413,7 +412,6 @@ function RoomContent({
         )}
       </div>
 
-      {/* Bottom Dock & Notices */}
       <motion.div
         initial={{ opacity: 0, y: 40 }}
         animate={{ opacity: 1, y: 0 }}
@@ -448,7 +446,7 @@ function RoomContent({
         )}
 
         <ControlDock
-          onLeave={() => setDialogType("leave")}
+          onLeave={openLeaveDialog}
           isListener={myRole === "listener"}
           deafened={deafened}
           onToggleDeafen={onToggleDeafen}
@@ -458,7 +456,6 @@ function RoomContent({
         </p>
       </motion.div>
 
-      {/* Dialogs */}
       <AnimatePresence>
         {selected && (
           <div className="fixed inset-0 z-10000 flex items-center justify-center">
@@ -506,14 +503,11 @@ function RoomContent({
 function AudienceSidebar() {
   const participants = useRoomParticipants();
   const audience = participants.map((p) => ({ p, ...parseMeta(p) })).filter((e) => e.role === "listener");
-
-  if (audience.length === 0) return null; // ✅ Removes "Audience · 0"
+  if (audience.length === 0) return null;
 
   return (
     <>
-      <div className="mb-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-        Audience · {audience.length}
-      </div>
+      <div className="mb-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Audience · {audience.length}</div>
       <div className="flex flex-col gap-3">
         {audience.map(({ p, avatarUrl }) => (
           <div key={p.identity} className="flex items-center gap-3">
@@ -532,13 +526,10 @@ function AudienceSidebar() {
 }
 
 function RequestsSidebar({ requests, onApprove }: { requests: SpeakerRequestItem[]; onApprove: (req: SpeakerRequestItem, status: "APPROVED" | "DECLINED") => void; }) {
-  if (requests.length === 0) return null; // ✅ Removes "Speaker Requests · 0"
-
+  if (requests.length === 0) return null;
   return (
     <>
-      <div className="mb-4 text-xs font-semibold uppercase tracking-wider text-[#6B4A3A]">
-        Speaker Requests · {requests.length}
-      </div>
+      <div className="mb-4 text-xs font-semibold uppercase tracking-wider text-[#6B4A3A]">Speaker Requests · {requests.length}</div>
       <div className="flex flex-col gap-3">
         {requests.map((req) => (
           <motion.div key={req.id} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="flex items-center justify-between rounded-xl border border-border bg-card p-3 shadow-sm">
@@ -580,7 +571,6 @@ function RoomStage({ isHost, onManage }: { isHost: boolean; onManage: (p: { iden
   const participants = useRoomParticipants();
   const entries = participants.map((p) => ({ p, ...parseMeta(p) }));
   const stage = entries.filter((e) => e.role !== "listener").sort((a, b) => Number(b.role === "host") - Number(a.role === "host"));
-
   const count = stage.length;
   const gridCols = count === 1 ? "grid-cols-1" : count === 2 ? "grid-cols-2" : "grid-cols-2 sm:grid-cols-3";
   const avatarSize = count === 1 ? "h-32 w-32 sm:h-40 sm:w-40" : count === 2 ? "h-24 w-24 sm:h-32 sm:w-32" : "h-20 w-20 sm:h-24 sm:w-24";
@@ -589,9 +579,7 @@ function RoomStage({ isHost, onManage }: { isHost: boolean; onManage: (p: { iden
     <div className="flex h-full min-h-full flex-col items-center justify-center py-6">
       {count > 0 ? (
         <div className="flex w-full flex-col items-center gap-6">
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-            On Stage · {count}
-          </span>
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">On Stage · {count}</span>
           <div className={cn("grid w-full max-w-3xl place-items-center gap-x-6 gap-y-8", gridCols)}>
             <AnimatePresence>
               {stage.map(({ p, role, avatarUrl }) => (
@@ -600,9 +588,7 @@ function RoomStage({ isHost, onManage }: { isHost: boolean; onManage: (p: { iden
             </AnimatePresence>
           </div>
         </div>
-      ) : (
-        <p className="text-sm text-muted-foreground">No one is on stage yet.</p>
-      )}
+      ) : ( <p className="text-sm text-muted-foreground">No one is on stage yet.</p> )}
     </div>
   );
 }

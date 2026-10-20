@@ -26,6 +26,7 @@ export async function joinRoom(input: z.infer<typeof inputSchema>) {
     if (!parsed.success) return { success: false, error: "Invalid room ID." };
     const { roomId } = parsed.data;
 
+    /* ── 1. Parallel Fetch (User + Room) ── */
     const [me, room] = await Promise.all([
       prisma.user.findUnique({
         where: { clerkUserId },
@@ -44,16 +45,18 @@ export async function joinRoom(input: z.infer<typeof inputSchema>) {
     const liveKitUrl = process.env.LIVEKIT_URL;
     if (!liveKitUrl) return { success: false, error: "LiveKit not configured." };
 
-    // Both lookups at the same time
+    const isHost = room.hostId === me.id;
+
+    /* ── 2. Parallel Fetch (LiveKit + DB Request) ── */
     const [activeParticipants, speakerRequest] = await Promise.all([
       listLiveKitParticipants(room.liveKitRoomName).catch((): LiveKitParticipants => []),
       prisma.roomSpeakerRequest.findUnique({
         where: { roomId_userId: { roomId, userId: me.id } },
-        select: { status: true },
+        select: { id: true, status: true },
       }),
     ]);
 
-    // Ghost session cleanup (only costs time if already connected elsewhere)
+    /* ── 3. Ghost Session Cleanup ── */
     if (activeParticipants.some((p) => p.identity === me.id)) {
       try {
         await livekitRoomService.removeParticipant(room.liveKitRoomName, me.id);
@@ -61,11 +64,24 @@ export async function joinRoom(input: z.infer<typeof inputSchema>) {
       } catch {}
     }
 
-    const isHost = room.hostId === me.id;
-    const isSpeaker = isHost || speakerRequest?.status === "APPROVED";
+    /* ── 4. Strict Reset to Audience Logic ── */
+    let finalStatus = speakerRequest?.status;
+    
+    // If the user is NOT the host, and they were previously APPROVED,
+    // we force them back to DECLINED so they join as a listener.
+    if (!isHost && speakerRequest?.status === "APPROVED" && speakerRequest.id) {
+      await prisma.roomSpeakerRequest.update({
+        where: { id: speakerRequest.id },
+        data: { status: "DECLINED" },
+      });
+      finalStatus = "DECLINED";
+    }
+
+    const isSpeaker = isHost || finalStatus === "APPROVED";
     const role = isHost ? "host" : isSpeaker ? "speaker" : "listener";
     const avatarUrl = me.profileImageUrl ?? me.imageUrl ?? null;
 
+    /* ── 5. Generate Token ── */
     const token = await createLiveKitToken({
       roomName: room.liveKitRoomName,
       participantId: me.id,

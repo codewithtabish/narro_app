@@ -5,7 +5,7 @@ import { auth } from "@clerk/nextjs/server";
 import { after } from "next/server";
 import { z } from "zod";
 
-import { revalidateRooms } from "@/lib/cache-keys";
+import { revalidateRooms, revalidateUserRoom } from "@/lib/cache-keys"; // ✅ Import revalidateUserRoom
 import {
   createLiveKitRoom,
   generateCallRoomName,
@@ -81,9 +81,9 @@ export async function createRoom(
       data: { liveKitRoomName },
     });
 
-    // 4. Revalidate NOW (after the final DB write, before returning),
-    //    so the host never lands on a list that is missing the new room.
+    // 4. Revalidate NOW (after the final DB write, before returning)
     revalidateRooms();
+    revalidateUserRoom(clerkUserId); // ✅ Revalidate the userRoom cache so the button changes to "Resume Room"
 
     // 5. Background: push notifications (slow, must never block the host)
     after(async () => {
