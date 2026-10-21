@@ -7,6 +7,131 @@ datasource db {
   provider = "postgresql"
 }
 
+// ============================================
+// ENUMS
+// ============================================
+
+enum PlanTier {
+  FREE
+  PRO
+}
+
+enum PaymentProvider {
+  NONE
+  SAFEPAY
+  REVENUECAT
+}
+
+enum UserStatus {
+  ONLINE
+  OFFLINE
+}
+
+enum AISessionStatus {
+  ACTIVE
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  EXPIRED
+  CANCELLED
+  INCOMPLETE
+  TRIALING
+  PAST_DUE
+}
+
+enum SafepayStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+  EXPIRED
+}
+
+enum SafepayPaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  CANCELLED
+  REFUNDED
+}
+
+enum BillingInterval {
+  MONTHLY
+  YEARLY
+}
+
+enum RoomVisibility {
+  PUBLIC
+  PRIVATE
+}
+
+enum RoomStatus {
+  OPEN
+  CLOSED
+}
+
+enum NotificationType {
+  NEW_MESSAGE
+  ROOM_INVITATION
+  PROGRESS_REPORT
+  SUBSCRIPTION_UPDATE
+  MISSED_CALL
+  SYSTEM
+  INCOMING_CALL
+  GIFT_RECEIVED
+  NEW_FOLLOWER
+}
+
+enum PushPlatform {
+  ANDROID
+  IOS
+  WEB
+}
+
+enum PushProvider {
+  FCM
+  EXPO
+  APNS
+}
+
+enum CallStatus {
+  RINGING
+  ACCEPTED
+  REJECTED
+  MISSED
+  ENDED
+  CANCELLED
+}
+
+enum ProficiencyLevel {
+  BEGINNER
+  ELEMENTARY
+  INTERMEDIATE
+  UPPER_INTERMEDIATE
+  ADVANCED
+  NATIVE
+}
+
+enum OnboardingStep {
+  PROFILE
+  LANGUAGES
+  LEVEL
+  INTERESTS
+  COMPLETED
+}
+
+enum LiveStreamStatus {
+  LIVE
+  ENDED
+}
+
+// ============================================
+// USER
+// ============================================
+
 model User {
   id                         String                @id @default(cuid())
   clerkUserId                String                @unique
@@ -18,22 +143,34 @@ model User {
   learningLanguage           String                @default("en")
   status                     UserStatus            @default(ONLINE)
   lastSeenAt                 DateTime?
+  
+  // Credits & Plans
   freeSecondsGranted         Int                   @default(600)
   freeSecondsUsed            Int                   @default(0)
   planTier                   PlanTier              @default(FREE)
-  createdAt                  DateTime              @default(now())
-  updatedAt                  DateTime              @updatedAt
-  interests                  String[]              @default([])
-  languagesLearning          String[]              @default([])
-  languagesSpoken            String[]              @default([])
-  nextRenewalAt              DateTime?
-  onboardingCompletedAt      DateTime?
+  
+  // ✅ Gifting Economy
+  coinBalance                Int                   @default(50)  
+  earnedCoins                Int                   @default(0)   
+  
   paymentProvider            PaymentProvider       @default(NONE)
   planExpiresAt              DateTime?
   planStartedAt              DateTime?
+  nextRenewalAt              DateTime?
+
+  // Profile Info
+  interests                  String[]              @default([])
+  languagesLearning          String[]              @default([])
+  languagesSpoken            String[]              @default([])
   proficiencyByLanguage      Json?
   profileImageUrl            String?
   isAvailable                Boolean               @default(true)
+  onboardingCompletedAt      DateTime?
+
+  createdAt                  DateTime              @default(now())
+  updatedAt                  DateTime              @updatedAt
+
+  // Relations
   aiSessions                 AISession[]
   callsAsCaller              Call[]                @relation("CallCaller")
   callsAsReceiver            Call[]                @relation("CallReceiver")
@@ -51,8 +188,17 @@ model User {
   usageRecords               UsageRecord[]
   blocksCreated              UserBlock[]           @relation("BlocksCreated")
   blocksReceived             UserBlock[]           @relation("BlocksReceived")
-  // ✅ NEW RELATION
   speakerRequests            RoomSpeakerRequest[]
+  
+  // ✅ Live Stream & Gifting
+  liveStreams                LiveStream[]          @relation("HostedStreams")
+  giftsSent                  GiftTransaction[]     @relation("GiftSender")
+  giftsReceived              GiftTransaction[]     @relation("GiftReceiver")
+  coinPurchases              CoinPurchase[]
+
+  // ✅ Follow System
+  followers                  Follow[]              @relation("Following") // People following me
+  following                  Follow[]              @relation("Follower")  // People I follow
 
   @@index([status])
   @@index([lastSeenAt])
@@ -64,56 +210,84 @@ model User {
   @@index([onboardingCompletedAt])
 }
 
-model Onboarding {
-  id                   String           @id @default(cuid())
-  userId               String           @unique
-  currentStep          OnboardingStep   @default(PROFILE)
-  completedSteps       OnboardingStep[] @default([])
-  profileCompletedAt   DateTime?
-  languagesCompletedAt DateTime?
-  levelCompletedAt     DateTime?
-  interestsCompletedAt DateTime?
-  startedAt            DateTime         @default(now())
-  completedAt          DateTime?
-  abandonedAt          DateTime?
-  durationSeconds      Int?
-  source               String?
-  variant              String?
-  device               String?
-  createdAt            DateTime         @default(now())
-  updatedAt            DateTime         @updatedAt
-  user                 User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+// ============================================
+// FOLLOW SYSTEM
+// ============================================
 
-  @@index([userId])
-  @@index([currentStep])
-  @@index([completedAt])
-  @@index([abandonedAt])
-  @@index([startedAt])
+model Follow {
+  id          String   @id @default(cuid())
+  followerId  String   // The user who is following
+  followingId String   // The user being followed
+  createdAt   DateTime @default(now())
+
+  follower    User     @relation("Follower", fields: [followerId], references: [id], onDelete: Cascade)
+  following   User     @relation("Following", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@unique([followerId, followingId]) // Prevent duplicate follows
+  @@index([followerId])
+  @@index([followingId])
+  @@index([createdAt])
 }
 
-model Subscription {
-  id                    String             @id @default(cuid())
-  userId                String
-  tier                  PlanTier
-  status                SubscriptionStatus @default(INCOMPLETE)
-  revenueCatAppUserId   String?
-  productId             String?
-  entitlementId         String?
-  store                 String?
-  originalTransactionId String?            @unique
-  currentPeriodStart    DateTime?
-  currentPeriodEnd      DateTime?
-  cancelAtPeriodEnd     Boolean            @default(false)
-  canceledAt            DateTime?
-  createdAt             DateTime           @default(now())
-  updatedAt             DateTime           @updatedAt
-  user                  User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+// ============================================
+// LIVE STREAM & GIFTING
+// ============================================
+
+model LiveStream {
+  id              String           @id @default(cuid())
+  hostId          String
+  title           String
+  description     String?          // ✅ Added Description
+  thumbnailUrl    String?          // ✅ Added Thumbnail (Optional)
+  status          LiveStreamStatus @default(LIVE)
+  liveKitRoomName String           @unique
+  viewerCount     Int              @default(0)
+  createdAt       DateTime         @default(now())
+  endedAt         DateTime?
+
+  host            User             @relation("HostedStreams", fields: [hostId], references: [id], onDelete: Cascade)
+  gifts           GiftTransaction[]
+
+  @@index([status])
+  @@index([hostId])
+}
+
+model GiftTransaction {
+  id         String      @id @default(cuid())
+  senderId   String
+  receiverId String
+  giftId     String      // ✅ Hardcoded string (e.g., "rose", "golden_mic")
+  streamId   String?     
+  coinsSpent Int
+  createdAt  DateTime    @default(now())
+
+  sender     User        @relation("GiftSender", fields: [senderId], references: [id])
+  receiver   User        @relation("GiftReceiver", fields: [receiverId], references: [id])
+  stream     LiveStream? @relation(fields: [streamId], references: [id])
+
+  @@index([senderId])
+  @@index([receiverId])
+  @@index([streamId])
+}
+
+model CoinPurchase {
+  id               String   @id @default(cuid())
+  userId           String
+  safepayTrackerId String?  @unique
+  coinsAdded       Int
+  amountPaid       Int      // in cents
+  currency         String   @default("USD")
+  status           String   @default("PENDING") // PENDING, PAID, FAILED
+  createdAt        DateTime @default(now())
+
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, status])
-  @@index([userId, tier])
-  @@index([currentPeriodEnd])
-  @@index([revenueCatAppUserId])
 }
+
+// ============================================
+// SAFEPAY (Web Payments)
+// ============================================
 
 model SafepaySubscription {
   id                    String           @id @default(cuid())
@@ -172,6 +346,34 @@ model SafepayPayment {
   @@index([status, createdAt])
 }
 
+// ============================================
+// OTHER CORE MODELS
+// ============================================
+
+model Subscription {
+  id                    String             @id @default(cuid())
+  userId                String
+  tier                  PlanTier
+  status                SubscriptionStatus @default(INCOMPLETE)
+  revenueCatAppUserId   String?
+  productId             String?
+  entitlementId         String?
+  store                 String?
+  originalTransactionId String?            @unique
+  currentPeriodStart    DateTime?
+  currentPeriodEnd      DateTime?
+  cancelAtPeriodEnd     Boolean            @default(false)
+  canceledAt            DateTime?
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+  user                  User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([userId, tier])
+  @@index([currentPeriodEnd])
+  @@index([revenueCatAppUserId])
+}
+
 model Room {
   id              String         @id @default(cuid())
   liveKitRoomName String         @unique
@@ -187,13 +389,94 @@ model Room {
   closedAt        DateTime?
   notifications   Notification[]
   host            User           @relation("HostedRooms", fields: [hostId], references: [id], onDelete: Cascade)
-  // ✅ NEW RELATION
   speakerRequests RoomSpeakerRequest[]
 
   @@index([hostId])
   @@index([status, visibility])
   @@index([language, status])
   @@index([createdAt])
+}
+
+model RoomSpeakerRequest {
+  id        String   @id @default(cuid())
+  roomId    String
+  userId    String
+  status    String   @default("PENDING") // PENDING, APPROVED, DECLINED
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  room      Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, userId])
+  @@index([roomId, status])
+  @@index([userId])
+}
+
+model Call {
+  id              String     @id @default(cuid())
+  callerId        String
+  receiverId      String
+  liveKitRoomName String     @unique
+  status          CallStatus @default(RINGING)
+  startedAt       DateTime?
+  endedAt         DateTime?
+  durationSeconds Int        @default(0)
+  endReason       String?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  caller          User       @relation("CallCaller", fields: [callerId], references: [id], onDelete: Cascade)
+  receiver        User       @relation("CallReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@index([callerId, createdAt])
+  @@index([receiverId, createdAt])
+  @@index([status, createdAt])
+}
+
+model Notification {
+  id                 String            @id @default(cuid())
+  userId             String
+  roomId             String?
+  chatConversationId String?
+  type               NotificationType
+  title              String
+  body               String?
+  data               Json?
+  readAt             DateTime?
+  createdAt          DateTime          @default(now())
+  chatConversation   ChatConversation? @relation(fields: [chatConversationId], references: [id])
+  room               Room?             @relation(fields: [roomId], references: [id])
+  user               User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt, createdAt])
+  @@index([roomId])
+  @@index([chatConversationId])
+}
+
+model Onboarding {
+  id                   String           @id @default(cuid())
+  userId               String           @unique
+  currentStep          OnboardingStep   @default(PROFILE)
+  completedSteps       OnboardingStep[] @default([])
+  profileCompletedAt   DateTime?
+  languagesCompletedAt DateTime?
+  levelCompletedAt     DateTime?
+  interestsCompletedAt DateTime?
+  startedAt            DateTime         @default(now())
+  completedAt          DateTime?
+  abandonedAt          DateTime?
+  durationSeconds      Int?
+  source               String?
+  variant              String?
+  device               String?
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+  user                 User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([currentStep])
+  @@index([completedAt])
+  @@index([abandonedAt])
+  @@index([startedAt])
 }
 
 model AISession {
@@ -278,26 +561,6 @@ model ChatConversation {
   @@index([userTwoId, lastMessageAt])
 }
 
-model Notification {
-  id                 String            @id @default(cuid())
-  userId             String
-  roomId             String?
-  chatConversationId String?
-  type               NotificationType
-  title              String
-  body               String?
-  data               Json?
-  readAt             DateTime?
-  createdAt          DateTime          @default(now())
-  chatConversation   ChatConversation? @relation(fields: [chatConversationId], references: [id])
-  room               Room?             @relation(fields: [roomId], references: [id])
-  user               User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, readAt, createdAt])
-  @@index([roomId])
-  @@index([chatConversationId])
-}
-
 model PushDevice {
   id               String       @id @default(cuid())
   userId           String
@@ -343,151 +606,4 @@ model UserBlock {
   @@index([blockedById])
   @@index([blockedUserId])
   @@index([createdAt])
-}
-
-model Call {
-  id              String     @id @default(cuid())
-  callerId        String
-  receiverId      String
-  liveKitRoomName String     @unique
-  status          CallStatus @default(RINGING)
-  startedAt       DateTime?
-  endedAt         DateTime?
-  durationSeconds Int        @default(0)
-  endReason       String?
-  createdAt       DateTime   @default(now())
-  updatedAt       DateTime   @updatedAt
-  caller          User       @relation("CallCaller", fields: [callerId], references: [id], onDelete: Cascade)
-  receiver        User       @relation("CallReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
-
-  @@index([callerId, createdAt])
-  @@index([receiverId, createdAt])
-  @@index([status, createdAt])
-}
-
-// ✅ NEW MODEL ADDED HERE
-model RoomSpeakerRequest {
-  id        String   @id @default(cuid())
-  roomId    String
-  userId    String
-  status    String   @default("PENDING") // PENDING, APPROVED, DECLINED
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  room      Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([roomId, userId])
-  @@index([roomId, status])
-  @@index([userId])
-}
-
-enum PlanTier {
-  FREE
-  PRO
-}
-
-enum PaymentProvider {
-  NONE
-  SAFEPAY
-  REVENUECAT
-}
-
-enum UserStatus {
-  ONLINE
-  OFFLINE
-}
-
-enum AISessionStatus {
-  ACTIVE
-  COMPLETED
-  FAILED
-  CANCELLED
-}
-
-enum SubscriptionStatus {
-  ACTIVE
-  EXPIRED
-  CANCELLED
-  INCOMPLETE
-  TRIALING
-  PAST_DUE
-}
-
-enum SafepayStatus {
-  ACTIVE
-  PAST_DUE
-  CANCELLED
-  EXPIRED
-}
-
-enum SafepayPaymentStatus {
-  PENDING
-  PAID
-  FAILED
-  CANCELLED
-  REFUNDED
-}
-
-enum BillingInterval {
-  MONTHLY
-  YEARLY
-}
-
-enum RoomVisibility {
-  PUBLIC
-  PRIVATE
-}
-
-enum RoomStatus {
-  OPEN
-  CLOSED
-}
-
-enum NotificationType {
-  NEW_MESSAGE
-  ROOM_INVITATION
-  PROGRESS_REPORT
-  SUBSCRIPTION_UPDATE
-  MISSED_CALL
-  SYSTEM
-  INCOMING_CALL
-}
-
-enum PushPlatform {
-  ANDROID
-  IOS
-  WEB
-}
-
-enum PushProvider {
-  FCM
-  EXPO
-  APNS
-}
-
-enum CallStatus {
-  RINGING
-  ACCEPTED
-  REJECTED
-  MISSED
-  ENDED
-  CANCELLED
-}
-
-enum ProficiencyLevel {
-  BEGINNER
-  ELEMENTARY
-  INTERMEDIATE
-  UPPER_INTERMEDIATE
-  ADVANCED
-  NATIVE
-}
-
-enum OnboardingStep {
-  PROFILE
-  LANGUAGES
-  LEVEL
-  INTERESTS
-  COMPLETED
 }

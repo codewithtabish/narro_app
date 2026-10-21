@@ -18,7 +18,7 @@ const NAV_ITEMS = [
   { label: "Home", href: "/" },
   { label: "Community", href: "/community" },
   { label: "Rooms", href: "/rooms" },
-  { label: "AI Learning", href: "/ai-learning" },
+  { label: "LiveStreams", href: "/live-stream" },
   { label: "Pricing", href: "/pricing" },
 ] as const;
 
@@ -31,11 +31,13 @@ export function PublicNavbar() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
-  /* ── Check if we are in an active call or room ────────────── */
-  // If the URL is /community/active/... OR /rooms/active/..., we hide the navbar
+  /* ── Check if we are in an active call, room, or live stream ────────────── */
+  // If the URL is /community/active/... OR /rooms/active/... OR /live-stream/...
+  // we hide the navbar for a fully immersive experience.
   const isImmersivePage = 
     pathname?.startsWith("/community/active/") || 
-    pathname?.startsWith("/rooms/active/");
+    pathname?.startsWith("/rooms/active/") ||
+    pathname?.startsWith("/live-stream/"); // ✅ Added live-stream
 
   /* ── Subtle shadow on scroll ───────────────────────────── */
   useEffect(() => {

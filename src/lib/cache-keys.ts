@@ -34,10 +34,15 @@ export const CACHE_TAGS = {
   room: (roomId: string) => `room:${roomId}`,
 
   /**
-   * ✅ NEW: Tracks if a specific user has an active room.
+   * Tracks if a specific user has an active room.
    * Used to prevent users from creating multiple rooms at once.
    */
   userRoom: (clerkId: string) => `user-room:${clerkId}`,
+
+  // ── LIVE STREAMS ──
+  liveStreams: "live-streams",
+  liveStream: (streamId: string) => `live-stream:${streamId}`,
+  userActiveStream: (clerkId: string) => `user-active-stream:${clerkId}`,
 
   /**
    * @deprecated Speaker requests are live data now (real-time via LiveKit,
@@ -75,7 +80,7 @@ export function revalidateSingleRoom(roomId: string) {
 }
 
 /**
- * ✅ NEW: Call when a user CREATES or CLOSES a room.
+ * Call when a user CREATES or CLOSES a room.
  * Clears the cache so the user can create a new room.
  */
 export function revalidateUserRoom(clerkId: string) {
@@ -88,6 +93,37 @@ export function revalidateUserRoom(clerkId: string) {
  */
 export function revalidateSpeakerRequests(_roomId: string) {
   // intentionally empty
+}
+
+// ─────────────────────────────────────────────
+// LIVE STREAMS
+// ─────────────────────────────────────────────
+
+/**
+ * Call after a stream is CREATED or ENDED (the /live directory changes).
+ */
+export function revalidateLiveStreams() {
+  revalidateTag(CACHE_TAGS.liveStreams, NOW);
+  revalidatePath("/live");
+}
+
+/**
+ * Call when a single stream's details change (e.g., viewer count).
+ */
+export function revalidateSingleLiveStream(streamId: string) {
+  revalidateTag(CACHE_TAGS.liveStream(streamId), NOW);
+  revalidateTag(CACHE_TAGS.liveStreams, NOW);
+  revalidatePath(`/live/${streamId}`);
+  revalidatePath("/live");
+}
+
+/**
+ * Call when a user STARTS or ENDS a stream.
+ * Clears the cache so the "Go Live" button reflects their state.
+ */
+export function revalidateUserActiveStream(clerkId: string) {
+  revalidateTag(CACHE_TAGS.userActiveStream(clerkId), NOW);
+  revalidatePath("/live");
 }
 
 // ─────────────────────────────────────────────
