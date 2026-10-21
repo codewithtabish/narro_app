@@ -1,6 +1,7 @@
 // src/app/live-stream/active/[streamId]/page.tsx
 import { auth } from "@clerk/nextjs/server";
 import Link from "next/link";
+import { connection } from "next/server"; // ✅ Import connection
 import { Suspense } from "react";
 
 import { getStreamById } from "@/app/actions/livestream/get-stream-by-id";
@@ -23,6 +24,9 @@ export default function ActiveStreamPage({ params }: PageProps) {
 }
 
 async function ActiveStreamContent({ params }: PageProps) {
+  // ✅ THIS IS THE FIX: Forces Next.js to render this on every request
+  await connection();
+
   const { streamId } = await params;
 
   const { userId: clerkUserId, redirectToSignIn } = await auth();
