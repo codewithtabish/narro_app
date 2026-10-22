@@ -1,11 +1,11 @@
 "use server";
 
 import {
-    CURRENCY,
-    MAX_USD,
-    MIN_USD,
-    coinsForUsd,
-    formatUsd,
+  CURRENCY,
+  MAX_USD,
+  MIN_USD,
+  coinsForUsd,
+  formatUsd,
 } from "@/data/coins";
 import prisma from "@/lib/clients/prisma-client";
 import { getSafepay } from "@/lib/safepay/safepay";
@@ -15,13 +15,14 @@ type Result = { success: true; url: string } | { success: false; error: string }
 
 const MAX_PENDING_PER_HOUR = 10;
 
-/**
- * Smallest-unit multiplier: 1 USD = 100 cents.
- * Used for both the amount stored in your DB and the amount sent to Safepay.
- * See the note below the code about confirming Safepay's expected unit.
- */
+/** What we store in the database: 1 USD = 100 cents (matches the schema comment). */
 const CENTS_PER_USD = 100;
-const SAFEPAY_AMOUNT_MULTIPLIER = CENTS_PER_USD;
+
+/**
+ * What we send to Safepay. Safepay takes whole dollars: with 100 here, the
+ * $2 pack showed up in the Safepay dashboard as "USD. 200.00". So this is 1.
+ */
+const SAFEPAY_AMOUNT_MULTIPLIER = 1;
 
 export async function createCoinCheckout(input: { amountUsd: number }): Promise<Result> {
   const { userId } = await auth();
