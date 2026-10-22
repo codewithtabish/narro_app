@@ -2,6 +2,7 @@
 "use server";
 
 import { auth } from "@clerk/nextjs/server";
+import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { z } from "zod";
 
@@ -35,20 +36,28 @@ export async function endLiveStream(input: z.infer<typeof inputSchema>) {
       return { success: true };
     }
 
-    // ✅ Clear cache instantly so the "Resume Stream" button disappears
-    revalidateLiveStreams();
-    revalidateUserActiveStream(clerkUserId);
+    // ✅ 1. UPDATE DATABASE FIRST
+    await prisma.liveStream.update({
+      where: { id: streamId },
+      data: { status: "ENDED", endedAt: new Date() },
+    });
 
-    // ✅ Background: DB Update + LiveKit Cleanup
+    // ✅ 2. REVALIDATE CACHES
+    // This explicitly clears the cache for getMyActiveStream
+    revalidateUserActiveStream(clerkUserId);
+    // This clears the directory list cache
+    revalidateLiveStreams();
+    
+    // ✅ 3. CLEAR PATHS
+    revalidatePath("/live-stream");
+    revalidatePath(`/live-stream/active/${streamId}`);
+
+    // ✅ 4. Background: LiveKit Cleanup
     after(async () => {
       try {
-        await prisma.liveStream.update({
-          where: { id: streamId },
-          data: { status: "ENDED", endedAt: new Date() },
-        });
         await deleteLiveKitRoom(stream.liveKitRoomName);
       } catch (err) {
-        console.error("[endLiveStream] Background cleanup failed:", err);
+        console.error("[endLiveStream] LiveKit cleanup failed:", err);
       }
     });
 

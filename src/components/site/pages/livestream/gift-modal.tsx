@@ -1,7 +1,7 @@
-// src/components/site/pages/live-stream/gift-modal.tsx
+// src/components/site/pages/livestream/gift-modal.tsx
 "use client";
 
-import { Coins, Loader2, X } from "lucide-react";
+import { Coins, Loader2, Sparkles, X } from "lucide-react";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 
@@ -29,18 +29,19 @@ export function GiftModal({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
-  const lock = useRef(false); // blocks double taps before React re-renders
+  const lock = useRef(false);
 
   const selected = GIFTS.find((g) => g.id === selectedId) ?? null;
   const canAfford = selected ? balance >= selected.coinCost : false;
+  const missing = selected && !canAfford ? selected.coinCost - balance : 0;
 
   function close() {
-    if (isPending) return; // don't close mid-send
+    if (isPending) return;
     setError(null);
     onOpenChange(false);
   }
 
-  /* ── Escape to close + lock page scroll while open ── */
+  /* Escape to close + lock page scroll */
   useEffect(() => {
     if (!open) return;
 
@@ -89,7 +90,6 @@ export function GiftModal({
     });
   }
 
-  // Only renders after a user click (never during hydration), so this guard is safe.
   if (!open || typeof document === "undefined") return null;
 
   return createPortal(
@@ -100,7 +100,7 @@ export function GiftModal({
         aria-label="Close"
         tabIndex={-1}
         onClick={close}
-        className="absolute inset-0 cursor-default bg-black/70 animate-in fade-in duration-200"
+        className="absolute inset-0 cursor-default bg-black/60 backdrop-blur-[2px] animate-in fade-in duration-200"
       />
 
       {/* Panel */}
@@ -108,44 +108,56 @@ export function GiftModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="gift-modal-title"
-        className="relative z-10 flex max-h-[90vh] w-full max-w-md flex-col gap-4 rounded-t-2xl border border-border bg-card p-5 text-card-foreground shadow-xl animate-in fade-in zoom-in-95 duration-200 sm:rounded-2xl"
+        className="relative z-10 flex max-h-[85vh] w-full flex-col gap-3 overflow-hidden rounded-t-3xl border border-white/10 bg-card/95 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] text-card-foreground shadow-2xl backdrop-blur-xl animate-in slide-in-from-bottom-8 fade-in duration-250 sm:max-w-sm sm:rounded-3xl sm:pb-4 sm:zoom-in-95 sm:slide-in-from-bottom-0"
       >
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 space-y-1">
+        {/* glow */}
+        <div
+          className="pointer-events-none absolute -top-16 left-1/2 size-40 -translate-x-1/2 rounded-full bg-[#6B4A3A]/40 blur-3xl"
+          aria-hidden="true"
+        />
+
+        {/* drag handle (mobile) */}
+        <div className="mx-auto -mt-1 h-1 w-9 rounded-full bg-muted-foreground/30 sm:hidden" />
+
+        {/* Header */}
+        <div className="relative flex items-center justify-between gap-3">
+          <div className="min-w-0">
             <h2
               id="gift-modal-title"
-              className="truncate text-lg font-semibold leading-none text-foreground"
+              className="flex items-center gap-1.5 truncate text-base font-semibold text-foreground"
             >
-              Send a gift to {hostName}
+              <Sparkles className="size-4 shrink-0 text-amber-400" aria-hidden="true" />
+              <span className="truncate">Gift {hostName}</span>
             </h2>
-            <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
-              <Coins className="size-4 text-primary" aria-hidden="true" />
-              <span>
-                Your balance:{" "}
-                <strong className="text-foreground">{balance.toLocaleString()}</strong> coins
-              </span>
-            </p>
           </div>
 
-          <button
-            type="button"
-            onClick={close}
-            disabled={isPending}
-            aria-label="Close"
-            className="inline-flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
-          >
-            <X className="size-5" aria-hidden="true" />
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/30 bg-amber-400/10 px-2.5 py-1 text-xs font-semibold text-amber-500 dark:text-amber-300">
+              <Coins className="size-3.5" aria-hidden="true" />
+              {balance.toLocaleString()}
+            </span>
+            <button
+              type="button"
+              onClick={close}
+              disabled={isPending}
+              aria-label="Close"
+              className="inline-flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
+            >
+              <X className="size-4" aria-hidden="true" />
+            </button>
+          </div>
         </div>
 
+        {/* Gift grid */}
         <div
           role="radiogroup"
           aria-label="Choose a gift"
-          className="grid grid-cols-3 gap-2 overflow-y-auto sm:grid-cols-4"
+          className="relative grid grid-cols-4 gap-2 overflow-y-auto p-1"
         >
-          {GIFTS.map((gift) => {
+          {GIFTS.map((gift, i) => {
             const active = gift.id === selectedId;
             const affordable = balance >= gift.coinCost;
+            const premium = gift.coinCost >= 1000;
             return (
               <button
                 key={gift.id}
@@ -157,21 +169,33 @@ export function GiftModal({
                   setSelectedId(gift.id);
                   setError(null);
                 }}
+                style={{ animationDelay: `${i * 30}ms` }}
                 className={cn(
-                  "flex flex-col items-center gap-1 rounded-xl border p-3 text-center transition-colors",
+                  "group relative flex flex-col items-center gap-0.5 rounded-2xl border px-1 py-2.5 text-center transition-all duration-200 animate-in fade-in zoom-in-90 fill-mode-both",
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
                   active
-                    ? "border-primary bg-primary/10"
-                    : "border-border bg-card hover:bg-accent",
-                  !affordable && !active && "opacity-50",
+                    ? "scale-[1.04] border-[#6B4A3A] bg-[#6B4A3A]/15 shadow-[0_0_0_1px_#6B4A3A,0_6px_20px_-6px_#6B4A3A]"
+                    : "border-border bg-background/60 hover:-translate-y-0.5 hover:bg-accent active:scale-95",
+                  premium &&
+                    !active &&
+                    "border-amber-400/40 bg-linear-to-b from-amber-400/10 to-transparent",
+                  !affordable && !active && "opacity-45",
                 )}
               >
-                <span className="text-3xl leading-none" aria-hidden="true">
+                <span
+                  className={cn(
+                    "text-3xl leading-none transition-transform duration-200 sm:text-[2rem]",
+                    active ? "scale-110" : "group-hover:scale-110",
+                  )}
+                  aria-hidden="true"
+                >
                   {gift.emoji}
                 </span>
-                <span className="text-xs font-medium text-foreground">{gift.name}</span>
-                <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                  <Coins className="size-3" aria-hidden="true" />
+                <span className="mt-1 text-[11px] font-medium leading-none text-foreground">
+                  {gift.name}
+                </span>
+                <span className="flex items-center gap-0.5 text-[10px] leading-none text-muted-foreground">
+                  <Coins className="size-2.5 text-amber-500" aria-hidden="true" />
                   {gift.coinCost.toLocaleString()}
                 </span>
               </button>
@@ -179,17 +203,18 @@ export function GiftModal({
           })}
         </div>
 
-        {error && (
-          <p role="alert" className="text-sm text-destructive">
-            {error}
+        {(error || missing > 0) && (
+          <p role="alert" className="relative text-center text-xs text-destructive">
+            {error ?? `You need ${missing.toLocaleString()} more coins for this gift.`}
           </p>
         )}
 
+        {/* Send */}
         <button
           type="button"
           onClick={handleSend}
           disabled={!selected || isPending || !canAfford}
-          className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50"
+          className="relative inline-flex h-11 w-full items-center justify-center gap-2 overflow-hidden rounded-2xl bg-linear-to-r from-[#6B4A3A] to-[#8a5f4a] px-4 text-sm font-semibold text-white shadow-lg shadow-[#6B4A3A]/30 transition-all hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6B4A3A] focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none"
         >
           {isPending ? (
             <>
@@ -197,7 +222,10 @@ export function GiftModal({
               Sending…
             </>
           ) : selected ? (
-            `Send ${selected.name} · ${selected.coinCost.toLocaleString()} coins`
+            <>
+              <span aria-hidden="true">{selected.emoji}</span>
+              Send {selected.name} · {selected.coinCost.toLocaleString()}
+            </>
           ) : (
             "Select a gift"
           )}

@@ -1,7 +1,7 @@
 // src/app/live-stream/active/[streamId]/page.tsx
 import { auth } from "@clerk/nextjs/server";
 import Link from "next/link";
-import { connection } from "next/server"; // ✅ Import connection
+import { connection } from "next/server";
 import { Suspense } from "react";
 
 import { getStreamById } from "@/app/actions/livestream/get-stream-by-id";
@@ -24,7 +24,7 @@ export default function ActiveStreamPage({ params }: PageProps) {
 }
 
 async function ActiveStreamContent({ params }: PageProps) {
-  // ✅ THIS IS THE FIX: Forces Next.js to render this on every request
+  // Force dynamic rendering so the room is always fresh
   await connection();
 
   const { streamId } = await params;
@@ -42,7 +42,6 @@ async function ActiveStreamContent({ params }: PageProps) {
     );
   }
 
-  // Opening this page IS joining: the token is issued here, server-side.
   const [joined, me, hostFollowers] = await Promise.all([
     joinLiveStream({ streamId }),
     prisma.user.findUnique({
@@ -56,29 +55,37 @@ async function ActiveStreamContent({ params }: PageProps) {
     return <Notice title="Can't open this stream" message={joined.error} />;
   }
   if (!me) {
-    return <Notice title="Can't open this stream" message="Your account could not be found." />;
+    return (
+      <Notice
+        title="Can't open this stream"
+        message="Your account could not be found."
+      />
+    );
   }
 
   return (
-    <StreamRoom
-      streamId={stream.id}
-      title={stream.title}
-      hostId={stream.host.id}
-      hostName={stream.host.name}
-      hostImage={stream.host.profileImageUrl ?? stream.host.imageUrl}
-      hostFollowers={hostFollowers}
-      currentUserId={me.id}
-      token={joined.token}
-      liveKitUrl={joined.liveKitUrl}
-      isHost={joined.isHost}
-      initialBalance={me.coinBalance}
-    />
+    // Fully transparent – inherits layout background (light + dark mode)
+    <div className="bg-transparent">
+      <StreamRoom
+        streamId={stream.id}
+        title={stream.title}
+        hostId={stream.host.id}
+        hostName={stream.host.name}
+        hostImage={stream.host.profileImageUrl ?? stream.host.imageUrl}
+        hostFollowers={hostFollowers}
+        currentUserId={me.id}
+        token={joined.token}
+        liveKitUrl={joined.liveKitUrl}
+        isHost={joined.isHost}
+        initialBalance={me.coinBalance}
+      />
+    </div>
   );
 }
 
 function Notice({ title, message }: { title: string; message: string }) {
   return (
-    <div className="flex flex-col items-center gap-3 py-24 text-center">
+    <div className="flex flex-col items-center gap-4 py-24 text-center">
       <h1 className="text-xl font-semibold text-foreground">{title}</h1>
       <p className="max-w-md text-sm text-muted-foreground">{message}</p>
       <Button asChild>

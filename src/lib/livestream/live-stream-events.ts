@@ -1,4 +1,4 @@
-// src/lib/live-stream-events.ts
+// src/lib/livestream/live-stream-events.ts
 // Shared (client + server) types for LiveKit data packets sent by the SERVER.
 // Topics: "chat" | "gift" | "reaction"
 
@@ -24,6 +24,12 @@ export interface GiftEventPayload {
   giftId: string;
   giftName: string;
   emoji: string;
+  /**
+   * Add this on the server (session.user.id) so the sender's own gift is
+   * de-duplicated exactly, and so two different people sending the same gift
+   * at the same time are never mixed up. Optional = old servers keep working.
+   */
+  senderId?: string;
   senderName: string;
   senderImage: string | null;
   createdAt: string;
