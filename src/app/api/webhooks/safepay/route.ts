@@ -3,9 +3,6 @@ import { NextResponse } from "next/server";
 import { fulfillCoinPurchase } from "@/lib/coins/fulfill";
 import { getSafepay } from "@/lib/safepay/safepay";
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
-
 /** Reads a nested value, e.g. pick(event, ["data", "notification", "tracker"]). */
 function pick(source: unknown, path: string[]): unknown {
   let current: unknown = source;
