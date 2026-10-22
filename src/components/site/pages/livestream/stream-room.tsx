@@ -57,6 +57,8 @@ import {
   type ReactNode,
 } from "react";
 
+// ✅ EDIT A: Added getCoinBalance import
+import { getCoinBalance } from "@/app/actions/coins/get-balance";
 import { endLiveStream } from "@/app/actions/livestream/end-stream";
 import { sendChatMessage } from "@/app/actions/livestream/send-chat-message";
 import { sendReaction } from "@/app/actions/livestream/send-reaction";
@@ -79,7 +81,6 @@ type RoomStatus = "connecting" | "live" | "reconnecting" | "ended" | "error";
 type Orientation = "portrait" | "landscape";
 type Facing = "user" | "environment";
 
-/** Why the camera / microphone could not start. */
 type MediaIssue = "blocked" | "busy" | "missing" | "unsupported" | "unknown";
 
 type FeedItem =
@@ -97,7 +98,6 @@ interface FloatingHeart {
   offset: number;
 }
 
-/** 0 = small, 1 = big, 2 = epic */
 type GiftTier = 0 | 1 | 2;
 type GiftMotion = "pop" | "launch" | "drive" | "rise" | "drop";
 
@@ -181,7 +181,6 @@ const KEYFRAMES = `
 }
 .narro-float { animation: narro-float ${HEART_LIFETIME_MS}ms ease-out forwards; }
 
-/* ───── chat on video ───── */
 @keyframes chat-in {
   0%   { transform: translateX(-26px) scale(.9); opacity: 0; filter: blur(6px); }
   60%  { transform: translateX(3px) scale(1.02); opacity: 1; filter: blur(0); }
@@ -226,7 +225,6 @@ const KEYFRAMES = `
   animation-delay: 0ms, calc(var(--ttl) - 700ms), 0ms;
 }
 
-/* ───── menu, toast, camera card ───── */
 @keyframes menu-in {
   0%   { opacity: 0; transform: translateY(10px) scale(.94); }
   100% { opacity: 1; transform: translateY(0) scale(1); }
@@ -248,7 +246,6 @@ const KEYFRAMES = `
 }
 .card-in { animation: card-in 320ms ease-out both; }
 
-/* ───── video fade-in + viewer count bump ───── */
 @keyframes video-in {
   0%   { opacity: 0; transform: scale(1.02); }
   100% { opacity: 1; transform: scale(1); }
@@ -261,7 +258,6 @@ const KEYFRAMES = `
 }
 .count-bump { animation: count-bump 360ms ease-out; }
 
-/* ───── gift: entrances ───── */
 @keyframes gift-pop {
   0%   { transform: scale(0) rotate(-18deg) translateY(60px); opacity: 0; }
   45%  { transform: scale(1.35) rotate(8deg) translateY(-14px); opacity: 1; }
@@ -300,7 +296,6 @@ const KEYFRAMES = `
   100% { transform: translateY(-10px) scale(1.06); }
 }
 
-/* ───── gift: effects ───── */
 @keyframes gift-ring {
   0%   { transform: scale(.2); opacity: .9; }
   100% { transform: scale(2.6); opacity: 0; }
@@ -420,9 +415,6 @@ const KEYFRAMES = `
 }
 `;
 
-/* ───────────────────────── pure helpers ───────────────────────── */
-
-/** Turn a getUserMedia / LiveKit error into something the user can act on. */
 function classifyMediaError(err: unknown): MediaIssue {
   const e = err as { name?: string; message?: string } | null;
   const name = e?.name ?? "";
@@ -467,19 +459,10 @@ function motionOf(name: string): GiftMotion {
   return "pop";
 }
 
-/**
- * Finds the host inside the room.
- * 1) the host's own screen -> the local participant
- * 2) a viewer's screen -> the participant whose identity is the host id
- * 3) fallback -> whoever is publishing camera / mic (only the host can publish),
- *    so the stream still works even if the token identity isn't the host's user id.
- */
 function findHostParticipant(room: Room, hostId: string, isHost: boolean): Participant | undefined {
   if (isHost) return room.localParticipant;
-
   const direct = room.remoteParticipants.get(hostId);
   if (direct) return direct;
-
   for (const p of room.remoteParticipants.values()) {
     if (
       p.getTrackPublication(Track.Source.Camera) ||
@@ -491,7 +474,6 @@ function findHostParticipant(room: Room, hostId: string, isHost: boolean): Parti
   return undefined;
 }
 
-/** Pure, deterministic 0..1 pseudo-random value (no Math.random during render). */
 function seeded(seed: number, index: number, salt: number): number {
   const x = Math.sin((index + 1) * 12.9898 + salt * 78.233 + seed) * 43758.5453;
   return x - Math.floor(x);
@@ -517,8 +499,6 @@ const NAME_COLORS = [
 ];
 const nameColor = (name: string) => NAME_COLORS[hashString(name) % NAME_COLORS.length];
 
-/* ───────────────────────── browser-state stores ───────────────────────── */
-
 const LARGE_QUERY = "(min-width: 640px)";
 
 function subscribeLarge(cb: () => void) {
@@ -539,8 +519,6 @@ const getFullscreenServer = () => false;
 const subscribeNever = () => () => {};
 const getFullscreenEnabled = () => Boolean(document.fullscreenEnabled);
 
-/* ───────────────────────── component ───────────────────────── */
-
 export function StreamRoom({
   streamId,
   title,
@@ -554,7 +532,6 @@ export function StreamRoom({
   isHost,
   initialBalance,
 }: StreamRoomProps) {
-  /* ── refs ── */
   const wrapRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioHostRef = useRef<HTMLDivElement>(null);
@@ -576,7 +553,6 @@ export function StreamRoom({
   const pendingChats = useRef<{ tempId: string; text: string; at: number }[]>([]);
   const recentGifts = useRef<{ key: string; at: number; src: "local" | "remote" }[]>([]);
 
-  /* ── state ── */
   const [status, setStatus] = useState<RoomStatus>("connecting");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [viewerCount, setViewerCount] = useState(0);
@@ -594,7 +570,6 @@ export function StreamRoom({
   const [feed, setFeed] = useState<FeedEntry[]>([]);
   const [giftQueue, setGiftQueue] = useState<GiftShow[]>([]);
   const [hearts, setHearts] = useState<FloatingHeart[]>([]);
-  const [balance, setBalance] = useState(initialBalance);
   const [giftOpen, setGiftOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -605,15 +580,17 @@ export function StreamRoom({
   const [layoutPref, setLayoutPref] = useState<Orientation>("landscape");
   const [isEnding, startEnding] = useTransition();
 
+  // ✅ EDIT B: Added payment state and balance ref
+  const [balance, setBalance] = useState(initialBalance);
+  const [awaitingPayment, setAwaitingPayment] = useState(false);
+  const balanceRef = useRef(initialBalance);
+
   const isLarge = useSyncExternalStore(subscribeLarge, getLarge, getLargeServer);
   const isFullscreen = useSyncExternalStore(subscribeFullscreen, getFullscreen, getFullscreenServer);
   const canFullscreen = useSyncExternalStore(subscribeNever, getFullscreenEnabled, getFullscreenServer);
 
-  // Small screens are always portrait. Large screens let the viewer choose.
   const orientation: Orientation = isLarge ? layoutPref : "portrait";
   const overlay = giftQueue[0] ?? null;
-
-  /* ───────────────────────── helpers ───────────────────────── */
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
@@ -621,14 +598,56 @@ export function StreamRoom({
     toastTimer.current = setTimeout(() => setToast(null), TOAST_MS);
   }, []);
 
-  /** Leave on purpose: no browser "Leave site?" prompt, clean disconnect. */
+  // ✅ EDIT C: Added payment polling logic
+  useEffect(() => {
+    balanceRef.current = balance;
+  }, [balance]);
+
+  useEffect(() => {
+    if (!awaitingPayment) return;
+    const startedAt = Date.now();
+    let checking = false;
+
+    const check = async () => {
+      if (checking) return;
+      checking = true;
+      try {
+        const next = await getCoinBalance();
+        if (next !== null && next > balanceRef.current) {
+          const gained = next - balanceRef.current;
+          setBalance(next);
+          setAwaitingPayment(false);
+          showToast(`+${gained.toLocaleString()} coins added`);
+        } else if (Date.now() - startedAt > 10 * 60_000) {
+          setAwaitingPayment(false);
+        }
+      } catch {
+        /* try again on the next tick */
+      } finally {
+        checking = false;
+      }
+    };
+
+    const id = setInterval(check, 4000);
+    const onReturn = () => {
+      if (document.visibilityState === "visible") void check();
+    };
+    window.addEventListener("focus", onReturn);
+    document.addEventListener("visibilitychange", onReturn);
+
+    return () => {
+      clearInterval(id);
+      window.removeEventListener("focus", onReturn);
+      document.removeEventListener("visibilitychange", onReturn);
+    };
+  }, [awaitingPayment, showToast]);
+
   const leaveNow = useCallback(() => {
     leavingRef.current = true;
     void roomRef.current?.disconnect();
     window.location.replace("/live-stream");
   }, []);
 
-  /** Returns true if this event id was already handled. Keeps the set small. */
   const markSeen = useCallback((id: string) => {
     const seen = seenIds.current;
     if (seen.has(id)) return true;
@@ -640,7 +659,6 @@ export function StreamRoom({
     return false;
   }, []);
 
-  /* Browser prompt ONLY when the tab/window is closed, never for our own buttons. */
   useEffect(() => {
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
       if (leavingRef.current || status !== "live") return;
@@ -658,7 +676,6 @@ export function StreamRoom({
     };
   }, [status]);
 
-  /* Escape closes the menu */
   useEffect(() => {
     if (!menuOpen) return;
     const onKey = (e: KeyboardEvent) => {
@@ -698,10 +715,6 @@ export function StreamRoom({
     setGiftQueue((prev) => [...prev, g].slice(-MAX_GIFT_QUEUE));
   }, []);
 
-  /**
-   * The sender sees their gift instantly from the local send result, and the same
-   * gift also arrives from the server. Whichever shows up second is a duplicate.
-   */
   const claimGift = useCallback((key: string, src: "local" | "remote") => {
     const now = Date.now();
     recentGifts.current = recentGifts.current.filter((e) => now - e.at < DEDUPE_WINDOW_MS);
@@ -714,7 +727,6 @@ export function StreamRoom({
     return false;
   }, []);
 
-  /* ── Advance the gift queue ── */
   useEffect(() => {
     if (!overlay) return;
     const t = setTimeout(() => {
@@ -723,7 +735,6 @@ export function StreamRoom({
     return () => clearTimeout(t);
   }, [overlay]);
 
-  /* ── Expire old chat lines ── */
   useEffect(() => {
     const id = setInterval(() => {
       const now = Date.now();
@@ -736,12 +747,9 @@ export function StreamRoom({
     return () => clearInterval(id);
   }, []);
 
-  /* ───────────────────────── LiveKit connection ───────────────────────── */
   useEffect(() => {
     let cancelled = false;
 
-    // Tuned for low latency: adaptive stream + dynacast + simulcast so every
-    // viewer gets the best quality their connection can handle, instantly.
     const room = new Room({
       adaptiveStream: { pixelDensity: "screen" },
       dynacast: true,
@@ -761,17 +769,13 @@ export function StreamRoom({
     const audioEls = audioElsRef.current;
     const heartTimerSet = heartTimers.current;
 
-    /** Single source of truth for "who is here". Runs on every room event. */
     const updateCount = () => {
       if (room.state !== ConnectionState.Connected) return;
-
       const hostP = findHostParticipant(room, hostId, isHost);
       let viewers = 0;
       room.remoteParticipants.forEach((p) => {
         if (p !== hostP) viewers += 1;
       });
-
-      // Host screen: everyone else is a viewer. Viewer screen: everyone else + me.
       setViewerCount(viewers + (isHost ? 0 : 1));
       setHostOnline(Boolean(hostP));
     };
@@ -829,7 +833,6 @@ export function StreamRoom({
       _kind?: unknown,
       topic?: string,
     ) => {
-      // Only trust packets sent by the SERVER (no participant sender).
       if (participant || !topic) return;
 
       let data: unknown;
@@ -839,12 +842,10 @@ export function StreamRoom({
         return;
       }
 
-      /* ── chat ── */
       if (topic === LIVE_TOPICS.chat && isChatPayload(data)) {
         if (markSeen(data.id)) return;
         const item: FeedItem = { kind: "chat", ...data };
 
-        // Our own message echoed back: upgrade the optimistic line instead of duplicating it.
         if (data.senderId === currentUserId) {
           const idx = pendingChats.current.findIndex((p) => p.text === data.text);
           if (idx >= 0) {
@@ -858,12 +859,9 @@ export function StreamRoom({
         return;
       }
 
-      /* ── gift ── */
       if (topic === LIVE_TOPICS.gift && isGiftPayload(data)) {
         if (markSeen(data.id)) return;
 
-        // Only de-duplicate against OUR OWN local gift. If the server tells us who sent it
-        // and it wasn't us, never suppress it (two people can send the same gift together).
         const sentByMe = data.senderId ? data.senderId === currentUserId : undefined;
         if (sentByMe !== false && claimGift(data.giftId, "remote")) return;
 
@@ -882,7 +880,6 @@ export function StreamRoom({
         return;
       }
 
-      /* ── reaction ── */
       if (topic === LIVE_TOPICS.reaction && isReactionPayload(data)) {
         if (markSeen(data.id)) return;
         if (data.senderId !== currentUserId) spawnHearts(data.count);
@@ -898,7 +895,6 @@ export function StreamRoom({
       .on(RoomEvent.LocalTrackUnpublished, refreshAll)
       .on(RoomEvent.TrackMuted, attachHostVideo)
       .on(RoomEvent.TrackUnmuted, attachHostVideo)
-      // People joining / leaving update the count and the host state the same instant.
       .on(RoomEvent.ParticipantConnected, refreshAll)
       .on(RoomEvent.ParticipantDisconnected, refreshAll)
       .on(RoomEvent.ConnectionStateChanged, updateCount)
@@ -923,7 +919,6 @@ export function StreamRoom({
         }
       });
 
-    // Safety net: even if an event is delayed or dropped, the count and video self-heal.
     const poll = setInterval(() => {
       updateCount();
       if (!videoRef.current?.srcObject) attachHostVideo();
@@ -937,20 +932,6 @@ export function StreamRoom({
           return;
         }
 
-        if (process.env.NODE_ENV !== "production") {
-          // If the host and a viewer print DIFFERENT room names / identities here,
-          // the token route is minting tokens for different rooms.
-          console.info("[stream-room] connected", {
-            room: room.name,
-            me: room.localParticipant.identity,
-            isHost,
-            hostId,
-            others: Array.from(room.remoteParticipants.keys()),
-          });
-        }
-
-        // The stream goes live even if the camera or mic can't start.
-        // Each one is tried on its own, and a failure only shows a helpful message.
         if (isHost) {
           const [cam, mic] = await Promise.allSettled([
             room.localParticipant.setCameraEnabled(true),
@@ -1011,15 +992,12 @@ export function StreamRoom({
     markSeen,
   ]);
 
-  /* ── Apply mute to host audio ── */
   useEffect(() => {
     listenMutedRef.current = listenMuted;
     audioElsRef.current.forEach((el) => {
       el.muted = listenMuted;
     });
   }, [listenMuted]);
-
-  /* ───────────────────────── camera / mic ───────────────────────── */
 
   const setCamera = useCallback(
     async (next: boolean, silent = false) => {
@@ -1082,8 +1060,6 @@ export function StreamRoom({
     void setCamera(!camOn);
   }, [camOn, setCamera]);
 
-  /* ── Auto-retry the camera when the problem is likely fixed ──
-     (permission allowed, the user comes back to the tab, or a device is plugged in) */
   useEffect(() => {
     if (!isHost || status !== "live" || camOn || !camIssue || camIssue === "unsupported") return;
 
@@ -1106,9 +1082,7 @@ export function StreamRoom({
           p.addEventListener("change", onPerm);
         })
         .catch(() => {});
-    } catch {
-      /* Permissions API not supported */
-    }
+    } catch {}
 
     const devices = navigator.mediaDevices;
     devices?.addEventListener?.("devicechange", retry);
@@ -1138,14 +1112,11 @@ export function StreamRoom({
     }
   }, [facing, showToast]);
 
-  /* ───────────────────────── other actions ───────────────────────── */
   const enableAudio = useCallback(async () => {
     try {
       await roomRef.current?.startAudio();
       setCanPlayAudio(true);
-    } catch {
-      /* still blocked */
-    }
+    } catch {}
   }, []);
 
   const toggleFullscreen = useCallback(async () => {
@@ -1168,9 +1139,7 @@ export function StreamRoom({
       }
       await navigator.clipboard.writeText(url);
       showToast("Link copied");
-    } catch {
-      /* share sheet dismissed */
-    }
+    } catch {}
   }, [title, showToast]);
 
   const handleHeart = useCallback(() => {
@@ -1179,7 +1148,6 @@ export function StreamRoom({
     pendingTaps.current += 1;
     if (tapTimer.current) return;
 
-    // Short batching window so taps feel instant but we don't spam the server.
     tapTimer.current = setTimeout(() => {
       const count = Math.min(pendingTaps.current, 5);
       pendingTaps.current = 0;
@@ -1199,7 +1167,6 @@ export function StreamRoom({
       setChatError(null);
       setChatText("");
 
-      // Optimistic: the line shows on the video instantly, before the server answers.
       localSeq.current += 1;
       const tempId = `local-chat-${Date.now()}-${localSeq.current}`;
       const now = Date.now();
@@ -1224,7 +1191,6 @@ export function StreamRoom({
         setChatText(text);
       };
 
-      // Keep the keyboard open and let the user type the next message right away.
       sendLock.current = false;
       setSendingChat(false);
       inputRef.current?.focus();
@@ -1249,7 +1215,6 @@ export function StreamRoom({
       leaveNow();
       return;
     }
-    // The confirm dialog lives on the page, so leave fullscreen first or it would be hidden.
     if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
     setErrorMsg(null);
     setConfirmOpen(true);
@@ -1278,13 +1243,12 @@ export function StreamRoom({
     });
   };
 
-  /** Called by the gift modal the moment the server confirms the gift. */
   const handleSent = useCallback(
     (gift: Gift, newBalance: number) => {
       setBalance(newBalance);
 
       const duplicate = claimGift(gift.id, "local");
-      if (duplicate) return; // the server copy already played and was added
+      if (duplicate) return;
 
       localSeq.current += 1;
       const uid = `local-gift-${Date.now()}-${localSeq.current}`;
@@ -1326,7 +1290,6 @@ export function StreamRoom({
       : "This ends your live stream. This can't be undone."
     : "You'll stop watching. You can rejoin anytime while the host is still live.";
 
-  /* ───────────────────────── render ───────────────────────── */
   return (
     <section aria-label={`Live stream: ${title}`} className="bg-transparent py-3 sm:py-4">
       <style dangerouslySetInnerHTML={{ __html: KEYFRAMES }} />
@@ -1341,7 +1304,6 @@ export function StreamRoom({
           "[&:fullscreen]:max-h-none [&:fullscreen]:max-w-none [&:fullscreen]:rounded-none [&:fullscreen]:border-0",
         )}
       >
-        {/* opacity (not visibility) so adaptive-stream never thinks the video is hidden */}
         <video
           ref={videoRef}
           autoPlay
@@ -1355,7 +1317,6 @@ export function StreamRoom({
         />
         <div ref={audioHostRef} aria-hidden="true" />
 
-        {/* ── camera-off card: sits UNDER the controls so they always stay usable ── */}
         {status === "live" && !hasVideo && (
           <CameraCard
             isHost={isHost}
@@ -1370,7 +1331,6 @@ export function StreamRoom({
           />
         )}
 
-        {/* readability gradients */}
         <div
           className="pointer-events-none absolute inset-x-0 top-0 z-10 h-32 bg-linear-to-b from-black/60 to-transparent"
           aria-hidden="true"
@@ -1380,7 +1340,6 @@ export function StreamRoom({
           aria-hidden="true"
         />
 
-        {/* ── top bar ── */}
         <div className="absolute inset-x-0 top-0 z-40 flex items-start justify-between gap-2 p-3">
           <div className="flex min-w-0 items-center gap-2 rounded-full border border-white/10 bg-black/40 py-1 pl-1 pr-3 backdrop-blur-md">
             {hostImage ? (
@@ -1423,7 +1382,6 @@ export function StreamRoom({
               aria-label={`${viewerCount} watching`}
             >
               <Eye className="size-3.5" aria-hidden="true" />
-              {/* key = count, so React remounts this span and replays the bump animation */}
               <span key={viewerCount} className="count-bump inline-block">
                 {viewerCount.toLocaleString()}
               </span>
@@ -1443,7 +1401,6 @@ export function StreamRoom({
           {title}
         </h1>
 
-        {/* ── mic problem chip (host) ── */}
         {isHost && micIssue && status === "live" && (
           <button
             type="button"
@@ -1456,7 +1413,6 @@ export function StreamRoom({
           </button>
         )}
 
-        {/* ── toast ── */}
         {toast && (
           <div
             role="status"
@@ -1466,7 +1422,24 @@ export function StreamRoom({
           </div>
         )}
 
-        {/* ── floating hearts ── */}
+        {/* ✅ EDIT D: Added payment status toast */}
+        {awaitingPayment && (
+          <div
+            role="status"
+            className="absolute left-1/2 top-28 z-40 inline-flex -translate-x-1/2 items-center gap-2 rounded-full border border-amber-300/40 bg-amber-500/25 px-3 py-1.5 text-xs font-medium text-amber-50 backdrop-blur-md"
+          >
+            <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+            Confirming payment…
+            <button
+              type="button"
+              onClick={() => setAwaitingPayment(false)}
+              className="font-semibold underline"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+
         <div className="pointer-events-none absolute inset-0 z-20 overflow-hidden" aria-hidden="true">
           {hearts.map((h) => (
             <Heart
@@ -1477,10 +1450,8 @@ export function StreamRoom({
           ))}
         </div>
 
-        {/* ── gift animation ── */}
         {overlay && <GiftOverlay key={overlay.id} gift={overlay} hostName={hostName} />}
 
-        {/* ── live chat on the video (transparent glass) ── */}
         <ul
           aria-live="polite"
           className="pointer-events-none absolute bottom-[5.25rem] left-3 z-20 flex max-h-[45%] w-[84%] max-w-sm flex-col justify-end gap-1.5 overflow-hidden sm:w-[60%]"
@@ -1533,7 +1504,6 @@ export function StreamRoom({
           </p>
         )}
 
-        {/* ── bottom controls (always above every overlay) ── */}
         <div className="absolute inset-x-0 bottom-0 z-45 flex items-center gap-2 p-3">
           <form onSubmit={handleSendChat} className="relative min-w-0 flex-1">
             <input
@@ -1616,7 +1586,6 @@ export function StreamRoom({
           </RoundBtn>
         </div>
 
-        {/* ── more-options menu (inside the video, so it also works in fullscreen) ── */}
         {menuOpen && (
           <>
             <button
@@ -1690,7 +1659,6 @@ export function StreamRoom({
           </>
         )}
 
-        {/* ── blocking states (only real connection problems) ── */}
         {status === "connecting" && (
           <StateOverlay>
             <Loader2 className="size-6 animate-spin" aria-hidden="true" />
@@ -1749,6 +1717,7 @@ export function StreamRoom({
         </p>
       )}
 
+      {/* ✅ EDIT E: Passed the new payment props to GiftModal */}
       {!isHost && (
         <GiftModal
           open={giftOpen}
@@ -1757,6 +1726,8 @@ export function StreamRoom({
           hostName={hostName}
           balance={balance}
           onSent={handleSent}
+          onPaymentStarted={() => setAwaitingPayment(true)}
+          awaitingPayment={awaitingPayment}
         />
       )}
 
@@ -1774,8 +1745,6 @@ export function StreamRoom({
     </section>
   );
 }
-
-/* ───────────────────────── camera card ───────────────────────── */
 
 function CameraCard({
   isHost,
@@ -1895,8 +1864,6 @@ function CameraCard({
   );
 }
 
-/* ───────────────────────── gift animation ───────────────────────── */
-
 const PARTICLE_GLYPHS = ["✨", "💖", "⭐", "🎉", "💫"];
 const PARTICLE_COUNT: Record<GiftTier, number> = { 0: 12, 1: 22, 2: 36 };
 const CONFETTI_COLORS = ["#fbbf24", "#f472b6", "#60a5fa", "#34d399", "#a78bfa", "#fb7185"];
@@ -1911,7 +1878,6 @@ function GiftOverlay({ gift, hostName }: { gift: GiftShow; hostName: string }) {
   const motion = motionOf(gift.giftName);
   const dur = GIFT_DURATION[tier];
 
-  // Pure + deterministic: derived from the gift id, so no Math.random in render.
   const fx = useMemo(() => {
     const seed = hashString(id);
 
@@ -1980,7 +1946,6 @@ function GiftOverlay({ gift, hostName }: { gift: GiftShow; hostName: string }) {
       className="gift-stage pointer-events-none absolute inset-0 z-20 overflow-hidden"
       style={{ "--dur": `${dur}ms` } as CSSProperties}
     >
-      {/* epic: flash + pulsing golden edge */}
       {tier === 2 && (
         <>
           <div
@@ -1994,21 +1959,18 @@ function GiftOverlay({ gift, hostName }: { gift: GiftShow; hostName: string }) {
         </>
       )}
 
-      {/* confetti rain */}
       <div className="absolute inset-0" aria-hidden="true">
         {fx.confetti.map((c) => (
           <span key={c.key} className="gift-confetti absolute top-0 rounded-xs" style={c.style} />
         ))}
       </div>
 
-      {/* fireworks */}
       <div className="absolute inset-0" aria-hidden="true">
         {fx.sparks.map((s) => (
           <span key={s.key} className="gift-spark absolute size-1.5 rounded-full" style={s.style} />
         ))}
       </div>
 
-      {/* centre stage */}
       <div
         className={cn(
           "absolute inset-0 flex flex-col items-center justify-center gap-3 px-3 pb-20",
@@ -2016,7 +1978,6 @@ function GiftOverlay({ gift, hostName }: { gift: GiftShow; hostName: string }) {
         )}
       >
         <div className="relative flex items-center justify-center" aria-hidden="true">
-          {/* glow */}
           <div
             className={cn(
               "absolute rounded-full blur-3xl",
@@ -2028,7 +1989,6 @@ function GiftOverlay({ gift, hostName }: { gift: GiftShow; hostName: string }) {
             )}
           />
 
-          {/* rotating rays */}
           {tier > 0 && (
             <div
               className={cn(
@@ -2044,11 +2004,9 @@ function GiftOverlay({ gift, hostName }: { gift: GiftShow; hostName: string }) {
             />
           )}
 
-          {/* shock rings */}
           <span className="gift-ring absolute size-24 rounded-full border-2 border-white/70" />
           <span className="gift-ring-2 absolute size-24 rounded-full border-2 border-amber-300/70" />
 
-          {/* sparkle burst */}
           {fx.particles.map((p) => (
             <span
               key={p.key}
@@ -2059,7 +2017,6 @@ function GiftOverlay({ gift, hostName }: { gift: GiftShow; hostName: string }) {
             </span>
           ))}
 
-          {/* rocket: flame trail */}
           {motion === "launch" && (
             <span
               className="gift-trail absolute left-1/2 top-1/2 h-28 w-3 origin-top -translate-x-1/2 rotate-45 rounded-full bg-linear-to-b from-amber-200 via-orange-500 to-transparent blur-[3px]"
@@ -2067,7 +2024,6 @@ function GiftOverlay({ gift, hostName }: { gift: GiftShow; hostName: string }) {
             />
           )}
 
-          {/* car: speed lines */}
           {motion === "drive" &&
             [0, 1, 2, 3].map((i) => (
               <span
@@ -2082,7 +2038,6 @@ function GiftOverlay({ gift, hostName }: { gift: GiftShow; hostName: string }) {
               />
             ))}
 
-          {/* the gift */}
           <span
             className={cn(
               "relative leading-none drop-shadow-[0_8px_24px_rgba(0,0,0,.55)]",
@@ -2098,7 +2053,6 @@ function GiftOverlay({ gift, hostName }: { gift: GiftShow; hostName: string }) {
           </span>
         </div>
 
-        {/* sender pill */}
         <span
           className={cn(
             "gift-pill gift-shine relative flex max-w-full items-center gap-2 overflow-hidden rounded-full border py-1.5 pl-1.5 pr-3 text-xs text-white shadow-xl backdrop-blur-md sm:text-sm",
@@ -2130,8 +2084,6 @@ function GiftOverlay({ gift, hostName }: { gift: GiftShow; hostName: string }) {
     </div>
   );
 }
-
-/* ───────────────────────── small components ───────────────────────── */
 
 function StateOverlay({ children }: { children: ReactNode }) {
   return (
