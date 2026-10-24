@@ -176,6 +176,7 @@ model User {
   callsAsReceiver            Call[]                @relation("CallReceiver")
   chatConversationsAsUserOne ChatConversation[]    @relation("ChatUserOne")
   chatConversationsAsUserTwo ChatConversation[]    @relation("ChatUserTwo")
+  messages                   Message[]             // ✅ Added for Direct Messaging
   notifications              Notification[]
   onboarding                 Onboarding?
   progressReports            ProgressReport[]
@@ -555,10 +556,25 @@ model ChatConversation {
   userOne        User           @relation("ChatUserOne", fields: [userOneId], references: [id], onDelete: Cascade)
   userTwo        User           @relation("ChatUserTwo", fields: [userTwoId], references: [id], onDelete: Cascade)
   notifications  Notification[]
+  messages       Message[]      // ✅ Added for Direct Messaging
 
   @@unique([userOneId, userTwoId])
   @@index([userOneId, lastMessageAt])
   @@index([userTwoId, lastMessageAt])
+}
+
+// ✅ NEW MODEL: Direct Messaging
+model Message {
+  id        String   @id @default(cuid())
+  chatId    String
+  senderId  String
+  text      String
+  createdAt DateTime @default(now())
+
+  chat      ChatConversation @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  sender    User             @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([chatId, createdAt])
 }
 
 model PushDevice {

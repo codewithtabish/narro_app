@@ -44,6 +44,9 @@ export const CACHE_TAGS = {
   liveStream: (streamId: string) => `live-stream:${streamId}`,
   userActiveStream: (clerkId: string) => `user-active-stream:${clerkId}`,
 
+  // ── CHAT / MESSAGES ──
+  userChats: (clerkId: string) => `user-chats:${clerkId}`,
+
   /**
    * @deprecated Speaker requests are live data now (real-time via LiveKit,
    * never cached). Kept only so old imports don't break the build.
@@ -124,6 +127,21 @@ export function revalidateSingleLiveStream(streamId: string) {
 export function revalidateUserActiveStream(clerkId: string) {
   revalidateTag(CACHE_TAGS.userActiveStream(clerkId), NOW);
   revalidatePath("/live");
+}
+
+// ─────────────────────────────────────────────
+// CHAT / MESSAGES
+// ─────────────────────────────────────────────
+
+/**
+ * Call when a user opens a chat or a new message is sent.
+ * Refreshes the inbox list for both participants.
+ */
+export function revalidateUserChats(clerkIds: string[]) {
+  clerkIds.forEach((clerkId) => {
+    revalidateTag(CACHE_TAGS.userChats(clerkId), NOW);
+  });
+  revalidatePath("/messages");
 }
 
 // ─────────────────────────────────────────────

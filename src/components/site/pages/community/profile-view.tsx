@@ -8,6 +8,7 @@ import Image from "next/image";
 import { ReceiverUser } from "@/app/actions/user/get-receiver-user-action";
 import { getInterestEmoji, getInterestLabel } from "@/data/interests";
 import { getLanguageFlag, getLanguageName } from "@/data/languages";
+import { MessageButton } from "../../general/chat/message-button";
 import { CallButton } from "./calling/call-button";
 
 export function ProfileView({ user }: { user: ReceiverUser }) {
@@ -130,7 +131,6 @@ export function ProfileView({ user }: { user: ReceiverUser }) {
                 <Phone className="h-5 w-5" /> Call Unavailable
               </button>
             ) : isSignedIn ? (
-              // 🔥 WIRED UP: The real CallButton
               <CallButton
                 receiverId={user.id} 
                 receiverClerkId={user.clerkUserId} 
@@ -146,15 +146,17 @@ export function ProfileView({ user }: { user: ReceiverUser }) {
               </SignInButton>
             )}
 
-            {/* Message Button */}
+            {/* ✅ Message Button - FIXED TO USE THE COMPONENT */}
             {user.isBlocked ? (
               <button disabled className="flex flex-1 cursor-not-allowed items-center justify-center gap-2 rounded-2xl border border-border bg-muted px-6 py-4 text-[15px] font-semibold text-muted-foreground">
                 <MessageSquare className="h-5 w-5" /> Message Unavailable
               </button>
             ) : isSignedIn ? (
-              <button className="flex flex-1 items-center justify-center gap-2 rounded-2xl border border-border bg-background px-6 py-4 text-[15px] font-semibold text-foreground transition-all hover:bg-muted active:scale-[0.98]">
-                <MessageSquare className="h-5 w-5" /> Message
-              </button>
+              <MessageButton 
+                receiverClerkId={user.clerkUserId}
+                receiverName={user.name}
+                receiverImage={avatarUrl}
+              />
             ) : (
               <SignInButton mode="modal">
                 <button className="flex w-full items-center justify-center gap-2 rounded-2xl border border-border bg-background px-6 py-4 text-[15px] font-semibold text-foreground transition-all hover:bg-muted active:scale-[0.98]">
